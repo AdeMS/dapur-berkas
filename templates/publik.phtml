@@ -1,0 +1,41 @@
+<?php
+/**
+ * Folder yang dibagikan lewat tautan publik (tanpa login).
+ *
+ * @var string $judul
+ * @var list<array{nama: string, folder: bool, ikon: string, ukuranTeks: string, alamat: string}> $isi
+ * @var list<array{nama: string, alamat: string}> $jejak
+ */
+$this->headTitle($this->judul);
+?>
+<div class="container py-4">
+    <div class="card">
+        <div class="card-body">
+            <h1 class="h5 mb-1"><i class="bi bi-folder2-open me-2"></i><?= $this->escapeHtml($this->judul) ?></h1>
+            <nav class="small mb-3" aria-label="Lokasi folder">
+<?php foreach ($this->jejak as $i => $j) : ?>
+<?= $i > 0 ? ' / ' : '' ?><?php if ($i === count($this->jejak) - 1) : ?><span class="text-body-secondary"><?= $this->escapeHtml($j['nama']) ?></span><?php else : ?><a href="<?= $this->escapeHtmlAttr($j['alamat']) ?>"><?= $this->escapeHtml($j['nama']) ?></a><?php endif ?>
+<?php endforeach ?>
+            </nav>
+<?php if (! $this->isi) : ?>
+            <p class="text-body-secondary mb-0">Folder ini kosong.</p>
+<?php else : ?>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead><tr><th>Nama</th><th class="text-end">Ukuran</th><th></th></tr></thead>
+                    <tbody>
+<?php foreach ($this->isi as $b) : ?>
+                        <tr>
+                            <td class="text-break"><i class="bi bi-<?= $this->escapeHtmlAttr($b['ikon']) ?> me-2<?= $b['folder'] ? ' text-warning' : '' ?>"></i><a href="<?= $this->escapeHtmlAttr($b['alamat']) ?>"><?= $this->escapeHtml($b['nama']) ?></a></td>
+                            <td class="text-end small text-nowrap"><?= $this->escapeHtml($b['ukuranTeks']) ?></td>
+                            <td class="text-end"><?php if (! $b['folder']) : ?><a class="btn btn-sm btn-link" href="<?= $this->escapeHtmlAttr($b['alamat']) ?>?unduh=1" title="Unduh"><i class="bi bi-download"></i></a><?php endif ?></td>
+                        </tr>
+<?php endforeach ?>
+                    </tbody>
+                </table>
+            </div>
+<?php endif ?>
+            <p class="small text-body-secondary mt-3 mb-0">Dibagikan lewat tautan. Siapa pun yang memegang tautan ini bisa melihat isinya.</p>
+        </div>
+    </div>
+</div>
