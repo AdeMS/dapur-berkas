@@ -1,0 +1,57 @@
+{
+    "name": "adems/dapur-berkas",
+    "description": "Modul berkas untuk Dapur AdeMS: file dan folder milik user, berbagi, tautan publik, tempat sampah, dan penjelajah berkas",
+    "type": "library",
+    "license": "BSD-3-Clause",
+    "keywords": [
+        "dapur",
+        "adems",
+        "laminas",
+        "mezzio",
+        "berkas",
+        "file"
+    ],
+    "homepage": "https://www.adems.id",
+    "authors": [
+        {
+            "name": "Ade M Saragih",
+            "homepage": "https://www.adems.id"
+        }
+    ],
+    "require": {
+        "php": "~8.2.0 || ~8.3.0 || ~8.4.0 || ~8.5.0",
+        "ext-fileinfo": "*",
+        "composer-runtime-api": "^2.0",
+        "adems/dapur-asset": "^1.0",
+        "adems/dapur-database": "^1.0",
+        "adems/dapur-user": "^2.6",
+        "laminas/laminas-db": "^2.22",
+        "laminas/laminas-diactoros": "^3.0",
+        "mezzio/mezzio-template": "^2.0 || ^3.0",
+        "psr/container": "^1.1 || ^2.0",
+        "psr/http-server-handler": "^1.0"
+    },
+    "suggest": {
+        "ext-gd": "Untuk gambar kecil (thumbnail) dan salinan foto tanpa data lokasi (EXIF) pada tautan publik",
+        "ext-intl": "Untuk menyamakan penulisan huruf beraksen pada nama berkas (normalisasi Unicode)"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "AdeMS\\Dapur\\Berkas\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "AdeMS\\Dapur\\Berkas\\Test\\": "test/"
+        }
+    },
+    "bin": [
+        "bin/dapur-berkas"
+    ],
+    "scripts": {
+        "test": "phpunit"
+    }
+}
