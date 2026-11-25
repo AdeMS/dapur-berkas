@@ -290,6 +290,11 @@ final class DaftarBerkas
         );
     }
 
+    public function ubahHakBagi(int $bagiId, int $berkasId, string $hak): void
+    {
+        $this->jalankan('UPDATE ' . $this->q($this->t->bagi) . ' SET hak = ? WHERE id = ? AND berkas_id = ? AND token IS NULL', [$hak, $bagiId, $berkasId]);
+    }
+
     public function hapusBagi(int $bagiId, int $berkasId): void
     {
         $this->jalankan('DELETE FROM ' . $this->q($this->t->bagi) . ' WHERE id = ? AND berkas_id = ?', [$bagiId, $berkasId]);
