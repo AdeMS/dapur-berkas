@@ -410,6 +410,11 @@ final class JelajahHandler implements RequestHandlerInterface
 
                     return 'Tautan publik dibuat.';
                 })(),
+                'ubah_hak' => (function () use ($user, $berkas, $teks): string {
+                    $this->kelola->ubahHakBagi($user->id, $this->ada($berkas), (int) $teks('bagi_id'), $teks('hak'));
+
+                    return $teks('hak') === KelolaBerkas::HAK_TULIS ? 'Hak diubah menjadi boleh menulis.' : 'Hak diubah menjadi hanya baca.';
+                })(),
                 'cabut_bagi' => (function () use ($user, $berkas, $teks): string {
                     $this->kelola->cabutBagi($user->id, $this->ada($berkas), (int) $teks('bagi_id'));
 
