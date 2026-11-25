@@ -1,0 +1,38 @@
+#!/usr/bin/env php
+<?php
+
+/**
+ * Perintah modul berkas Dapur AdeMS. Jalankan dari folder inti:
+ *
+ *   vendor/bin/dapur-berkas info
+ *   vendor/bin/dapur-berkas kuota <email> [<MB>|bawaan]
+ *   vendor/bin/dapur-berkas bersihkan
+ */
+
+declare(strict_types=1);
+
+use AdeMS\Dapur\Berkas\KelolaBerkas;
+use AdeMS\Dapur\Berkas\Pengaturan;
+use AdeMS\Dapur\Berkas\Perintah;
+use AdeMS\Dapur\User\DaftarUser;
+
+require $GLOBALS['_composer_autoload_path'] ?? dirname(__DIR__, 3) . '/autoload.php';
+
+try {
+    chdir(Pengaturan::folderInti());
+
+    $container = require 'config/container.php';
+    $user      = $container->get(DaftarUser::class);
+
+    exit((new Perintah(
+        $container->get(KelolaBerkas::class),
+        static fn (string $email): ?int => $user->cariEmail($email)?->id,
+    ))->jalankan(array_values(array_slice($argv, 1))));
+} catch (Throwable $e) {
+    while ($e->getPrevious() !== null) {
+        $e = $e->getPrevious();
+    }
+
+    fwrite(STDERR, 'Gagal: ' . $e->getMessage() . PHP_EOL);
+    exit(1);
+}
