@@ -181,6 +181,17 @@ final class KelolaBerkasTest extends TestCase
             self::assertTrue(true);
         }
 
+        // Ubah hak tanpa mencabut: kembali hanya baca.
+        $bagiBudi = array_values(array_filter($this->b->daftar->bagiBerkas($proyek->id), static fn (array $x): bool => $x['user_id'] !== null))[0];
+        $k->ubahHakBagi($this->ade, $proyek, (int) $bagiBudi['id'], KelolaBerkas::HAK_BACA);
+        self::assertSame(KelolaBerkas::HAK_BACA, $this->b->kelola()->hak($this->budi, $file));
+        try {
+            $k->ubahHakBagi($this->budi, $proyek, (int) $bagiBudi['id'], KelolaBerkas::HAK_TULIS);
+            self::fail('Hanya pemilik yang bisa mengubah hak');
+        } catch (GagalBerkas) {
+            self::assertTrue(true);
+        }
+
         foreach ($this->b->daftar->bagiBerkas($proyek->id) as $bagi) {
             $k->cabutBagi($this->ade, $proyek, (int) $bagi['id']);
         }
@@ -194,6 +205,13 @@ final class KelolaBerkasTest extends TestCase
         $token = $k->buatTautan($this->ade, $file, 7);
         self::assertSame(32, strlen($token));
         self::assertSame($file->id, (int) $this->b->daftar->token($token)['berkas_id']);
+
+        try {
+            $k->ubahHakBagi($this->ade, $file, (int) $this->b->daftar->token($token)['id'], KelolaBerkas::HAK_TULIS);
+            self::fail('Tautan publik selalu hanya baca');
+        } catch (GagalBerkas) {
+            self::assertTrue(true);
+        }
 
         $this->b->db->query("UPDATE uji_berkas_bagi SET sampai = '2020-01-01 00:00:00' WHERE token = ?", [$token]);
         self::assertNull($this->b->daftar->token($token), 'tautan kedaluwarsa');
