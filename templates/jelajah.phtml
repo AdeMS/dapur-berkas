@@ -436,7 +436,13 @@ $buka = function (array $b): string {
         const ya = document.getElementById('dapurDialogYa');
         const batal = document.getElementById('dapurDialogBatal');
         let selesai = null;
-        el.addEventListener('hidden.bs.modal', () => { if (selesai) { const s = selesai; selesai = null; s(null); } });
+        el.addEventListener('hidden.bs.modal', () => {
+            // Bootstrap membuka kembali gulir halaman saat jendela ditutup; jaga bila jendela lain masih terbuka.
+            if (document.querySelector('.modal.show')) {
+                document.body.classList.add('modal-open');
+            }
+            if (selesai) { const s = selesai; selesai = null; s(null); }
+        });
         document.getElementById('dapurDialogForm').addEventListener('submit', (e) => {
             e.preventDefault();
             const s = selesai;
@@ -445,6 +451,14 @@ $buka = function (array $b): string {
             s?.(isian.classList.contains('d-none') ? true : isian.value);
         });
         el.addEventListener('shown.bs.modal', () => (isian.classList.contains('d-none') ? ya : isian).focus());
+        // Selalu di atas jendela lain (mis. Bagikan), dengan latar gelapnya di antara keduanya.
+        el.style.zIndex = '1065';
+        el.addEventListener('show.bs.modal', () => setTimeout(() => {
+            const latar = document.querySelectorAll('.modal-backdrop');
+            if (latar.length > 1) {
+                latar[latar.length - 1].style.zIndex = '1060';
+            }
+        }));
         return ({ judul = 'Konfirmasi', pesan = '', tombol = 'Ya', bahaya = false, nilai = null, tanpaBatal = false }) => new Promise((hasil) => {
             selesai = hasil;
             el.querySelector('.modal-title').textContent = judul;
@@ -667,8 +681,12 @@ $buka = function (array $b): string {
             const label = b.jenis === 'tautan'
                 ? '<i class="bi bi-link-45deg me-1"></i><a href="' + teksAman(b.tujuan) + '" target="_blank" rel="noopener" class="text-break">' + teksAman(location.origin + b.tujuan) + '</a>' + (b.sampai ? ' <span class="text-body-secondary">(sampai ' + teksAman(b.sampai) + ')</span>' : '')
                 : (b.jenis === 'user' ? '<i class="bi bi-person me-1"></i>' + teksAman(b.nama ? b.nama + ' (' + b.tujuan + ')' : b.tujuan) : '<i class="bi bi-people me-1"></i>Anggota ' + teksAman(b.tujuan === 'dashboard' ? 'dashboard utama' : b.tujuan));
-            return '<li class="list-group-item d-flex justify-content-between align-items-center gap-2 small"><span>' + label
-                + ' <span class="badge text-bg-light border">' + (b.hak === 'tulis' ? 'boleh menulis' : 'hanya baca') + '</span></span>'
+            const hak = b.jenis === 'tautan'
+                ? '<span class="badge text-bg-light border">hanya baca</span>'
+                : '<select class="form-select form-select-sm w-auto berkas-ubah-hak" data-id="' + b.id + '" aria-label="Hak akses">'
+                    + '<option value="baca"' + (b.hak === 'tulis' ? '' : ' selected') + '>Hanya baca</option>'
+                    + '<option value="tulis"' + (b.hak === 'tulis' ? ' selected' : '') + '>Boleh menulis</option></select>';
+            return '<li class="list-group-item d-flex justify-content-between align-items-center gap-2 small"><span class="text-break me-auto">' + label + '</span>' + hak
                 + (b.jenis === 'tautan' ? '<button type="button" class="btn btn-sm btn-link berkas-salin" data-tautan="' + teksAman(location.origin + b.tujuan) + '" title="Salin tautan"><i class="bi bi-clipboard"></i></button>' : '')
                 + '<button type="button" class="btn btn-sm btn-link text-danger-emphasis berkas-cabut" data-id="' + b.id + '" title="Cabut"><i class="bi bi-x-circle"></i></button></li>';
         }).join('');
@@ -694,6 +712,19 @@ $buka = function (array $b): string {
             pesanBagi(teksAman(err.message), true);
         }
     }));
+    document.getElementById('berkasBagiDaftar').addEventListener('change', async (e) => {
+        const pilih = e.target.closest('.berkas-ubah-hak');
+        if (!pilih) {
+            return;
+        }
+        try {
+            const isi = await kirim({ aksi: 'ubah_hak', kode: kodeBagi, bagi_id: pilih.dataset.id, hak: pilih.value });
+            pesanBagi(teksAman(isi.pesan), false);
+        } catch (err) {
+            pesanBagi(teksAman(err.message), true);
+            muatBagi();
+        }
+    });
     document.getElementById('berkasBagiDaftar').addEventListener('click', async (e) => {
         const salin = e.target.closest('.berkas-salin');
         if (salin) {
