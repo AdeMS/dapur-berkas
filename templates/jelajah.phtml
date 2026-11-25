@@ -1,0 +1,857 @@
+<?php
+/**
+ * Penjelajah berkas: Berkas Saya (dan lokasi alias), Dibagikan dengan saya, Tempat sampah, dan pencarian.
+ *
+ * @var string $tokenCsrf
+ * @var string $fieldCsrf
+ * @var bool $belumSiap
+ * @var string $mode 'folder' | 'bagi' | 'sampah' | 'cari'
+ * @var list<array<string, mixed>> $isi
+ * @var list<array{nama: string, kode: ?string, lihat: ?string}> $jejak
+ * @var array<string, string> $lokasiMilik
+ * @var string $lihat
+ * @var string $cari
+ * @var string $tampil
+ * @var \AdeMS\Dapur\Berkas\Berkas|null $folder
+ * @var array<string, mixed>|null $kuota
+ * @var bool $bisaTulis
+ * @var bool $milikSaya
+ * @var string $lokasiAktif
+ * @var string $alamatDasar
+ */
+$this->headTitle('Berkas');
+$dasar   = $this->alamatDasar;
+$alamat  = static fn (array $q): string => $dasar . (($q = array_filter($q, static fn ($v): bool => $v !== null && $v !== '')) === [] ? '' : '?' . http_build_query($q));
+$sekarang = array_filter([
+    'lihat'  => $this->folder === null && $this->mode !== 'cari' ? $this->lihat : null,
+    'folder' => $this->folder?->kode,
+    'cari'   => $this->cari,
+    'tampil' => $this->tampil === 'ikon' ? 'ikon' : null,
+], static fn ($v): bool => $v !== null && $v !== '');
+$kembali = $sekarang === [] ? '' : '?' . http_build_query($sekarang);
+$tampilLain = $sekarang;
+if ($this->tampil === 'ikon') {
+    unset($tampilLain['tampil']);
+} else {
+    $tampilLain['tampil'] = 'ikon';
+}
+$csrf  = '<input type="hidden" name="' . $this->escapeHtmlAttr($this->fieldCsrf) . '" value="' . $this->escapeHtmlAttr($this->tokenCsrf) . '">';
+$balik = '<input type="hidden" name="kembali" value="' . $this->escapeHtmlAttr($kembali) . '">';
+$judulMode = match ($this->mode) {
+    'bagi'   => 'Dibagikan dengan saya',
+    'sampah' => 'Tempat sampah',
+    'cari'   => 'Hasil pencarian',
+    default  => $this->lokasiMilik[$this->lokasiAktif] ?? 'Berkas',
+};
+?>
+<style>
+    .berkas-nav .nav-link { color: var(--bs-body-color); border-radius: .5rem; padding: .4rem .75rem; }
+    .berkas-nav .nav-link.active { background: rgba(111, 207, 151, .25); color: var(--bs-link-color); font-weight: 600; }
+    .berkas-nav .nav-link:hover { background: rgba(111, 207, 151, .15); }
+    .berkas-caret { width: 1.25rem; flex: 0 0 1.25rem; line-height: 1; text-decoration: none; }
+    .berkas-caret .bi { display: inline-block; transition: transform .15s; font-size: .75rem; }
+    .berkas-caret[aria-expanded="true"] .bi { transform: rotate(90deg); }
+    .berkas-caret.berkas-caret-kosong { visibility: hidden; }
+    .berkas-pohon { padding-left: 1rem; }
+    .berkas-pohon .nav-link { padding: .2rem .5rem; font-size: .875rem; }
+    .berkas-tabel td { vertical-align: middle; }
+    .berkas-nama { word-break: break-word; }
+    .berkas-ikon { font-size: 1.25rem; }
+    .berkas-ikon .bi-folder-fill { color: #e0a800; }
+    .berkas-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: .75rem; }
+    .berkas-kartu { position: relative; border: 1px solid var(--bs-border-color); border-radius: .5rem; padding: .5rem; text-align: center; background: var(--bs-body-bg); }
+    .berkas-kartu:hover { border-color: var(--bs-success); }
+    .berkas-kartu .berkas-gambar { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: .35rem; background: var(--bs-tertiary-bg); }
+    .berkas-kartu .berkas-ikon-besar { font-size: 3.5rem; line-height: 1; display: flex; align-items: center; justify-content: center; aspect-ratio: 1; }
+    .berkas-kartu .berkas-ikon-besar .bi-folder-fill { color: #e0a800; }
+    .berkas-kartu .berkas-nama { font-size: .85rem; margin-top: .35rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .berkas-kartu .dropdown { position: absolute; top: .35rem; right: .35rem; }
+    .berkas-kartu .dropdown > .btn { background: var(--bs-body-bg); border: 1px solid var(--bs-border-color); border-radius: 50%; width: 1.9rem; height: 1.9rem; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0, 0, 0, .3); }
+    .berkas-kartu .dropdown > .btn:hover { border-color: var(--bs-success); }
+    .berkas-konteks { position: fixed; z-index: 1080; display: none; }
+    .berkas-konteks.show { display: block; }
+    .berkas-tarik { border: 2px dashed var(--bs-border-color); border-radius: .5rem; }
+    .berkas-tarik.berkas-tarik-aktif { border-color: var(--bs-success); background: rgba(111, 207, 151, .1); }
+    #berkasPratinjau .modal-body img, #berkasPratinjau .modal-body video { max-width: 100%; max-height: 75vh; display: block; margin: 0 auto; }
+    #berkasPratinjau iframe { width: 100%; height: 75vh; border: 0; background: #fff; }
+    #berkasPratinjauJudul.berkas-bisa-ganti { cursor: text; border-bottom: 1px dashed transparent; }
+    #berkasPratinjauJudul.berkas-bisa-ganti:hover { border-bottom-color: var(--bs-success); }
+</style>
+<div class="container py-4">
+    <div class="card mb-4">
+        <div class="card-body py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div>
+                <h1 class="h4 mb-0"><i class="bi bi-folder2-open me-2"></i>Berkas</h1>
+                <div class="small text-body-secondary">File dan folder Anda, yang dibagikan kepada Anda, dan tempat sampah.</div>
+            </div>
+<?php if ($this->kuota) : ?>
+            <div class="small" style="min-width: 14rem">
+                <div class="d-flex justify-content-between"><span>Penyimpanan</span><span><?= $this->escapeHtml($this->kuota['pakaiTeks']) ?> / <?= $this->escapeHtml($this->kuota['batasTeks']) ?></span></div>
+<?php if ($this->kuota['batas'] > 0) : ?>
+                <div class="progress mt-1" role="progressbar" aria-label="Kuota terpakai" aria-valuenow="<?= (int) $this->kuota['persen'] ?>" aria-valuemin="0" aria-valuemax="100" style="height: .4rem">
+                    <div class="progress-bar <?= $this->kuota['persen'] >= 90 ? 'bg-danger' : 'bg-success' ?>" style="width: <?= (int) $this->kuota['persen'] ?>%"></div>
+                </div>
+<?php endif ?>
+            </div>
+<?php endif ?>
+        </div>
+    </div>
+
+<?php if ($this->belumSiap) : ?>
+    <div class="alert alert-warning">Tabel berkas belum dibuat. Jalankan <code>php dapur pasang</code> dari folder inti Dapur.</div>
+</div>
+<?php return; endif ?>
+<?php if ($this->pesan) : ?>
+    <div class="alert alert-success alert-dismissible fade show" role="status"><?= $this->escapeHtml($this->pesan) ?><button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button></div>
+<?php endif ?>
+<?php if ($this->galat) : ?>
+    <div class="alert alert-danger alert-dismissible fade show" role="alert"><?= $this->escapeHtml($this->galat) ?><button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button></div>
+<?php endif ?>
+
+    <div class="row g-4">
+        <div class="col-lg-3">
+            <div class="card">
+                <div class="card-body p-2">
+                    <nav class="nav flex-column berkas-nav" aria-label="Bagian berkas" id="berkasPohon" data-folder-aktif="<?= $this->escapeHtmlAttr((string) ($this->milikSaya ? $this->folder?->kode : '')) ?>" data-tampil="<?= $this->tampil === 'ikon' ? 'ikon' : '' ?>">
+<?php foreach ($this->lokasiMilik as $lok => $judul) : ?>
+                        <div class="berkas-pohon-akar" data-lokasi="<?= $this->escapeHtmlAttr($lok) ?>">
+                            <div class="d-flex align-items-center">
+                                <button type="button" class="btn btn-sm btn-link text-body p-0 berkas-caret" aria-expanded="false" aria-label="Buka atau tutup folder <?= $this->escapeHtmlAttr($judul) ?>"><i class="bi bi-chevron-right"></i></button>
+                                <a class="nav-link flex-grow-1 berkas-buka-pohon<?= $this->mode === 'folder' && $this->milikSaya && $this->lokasiAktif === $lok ? ' active' : '' ?>" href="<?= $this->escapeHtmlAttr($alamat(['lihat' => $lok, 'tampil' => $this->tampil === 'ikon' ? 'ikon' : null])) ?>"><i class="bi <?= $lok === '' ? 'bi-person-badge' : 'bi-hdd-network' ?> me-2"></i><?= $this->escapeHtml($judul) ?></a>
+                            </div>
+                            <ul class="list-unstyled berkas-pohon mb-0" hidden></ul>
+                        </div>
+<?php endforeach ?>
+                        <a class="nav-link<?= $this->lihat === 'bagi' && $this->mode !== 'cari' ? ' active' : '' ?>" href="<?= $this->escapeHtmlAttr($alamat(['lihat' => 'bagi'])) ?>"><i class="bi bi-people me-2"></i>Dibagikan dengan saya</a>
+                        <a class="nav-link<?= $this->mode === 'sampah' ? ' active' : '' ?>" href="<?= $this->escapeHtmlAttr($alamat(['lihat' => 'sampah'])) ?>"><i class="bi bi-trash me-2"></i>Tempat sampah<?php if ($this->jumlahSampah > 0) : ?><span class="badge rounded-pill text-bg-secondary float-end mt-1" title="<?= (int) $this->jumlahSampah ?> berkas di tempat sampah"><?= (int) $this->jumlahSampah ?></span><?php endif ?></a>
+                    </nav>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-9">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        <form method="get" action="<?= $this->escapeHtmlAttr($dasar) ?>" class="d-flex gap-2 flex-grow-1" role="search">
+                            <input class="form-control" type="search" name="cari" maxlength="100" value="<?= $this->escapeHtmlAttr($this->cari) ?>" placeholder="Cari nama berkas atau folder" aria-label="Cari berkas">
+<?php if ($this->tampil === 'ikon') : ?>
+                            <input type="hidden" name="tampil" value="ikon">
+<?php endif ?>
+                            <button class="btn btn-outline-success"><i class="bi bi-search"></i><span class="visually-hidden">Cari</span></button>
+                        </form>
+                        <a class="btn btn-outline-secondary" href="<?= $this->escapeHtmlAttr($dasar . ($tampilLain === [] ? '' : '?' . http_build_query($tampilLain))) ?>" title="<?= $this->tampil === 'ikon' ? 'Tampilan daftar' : 'Tampilan ikon' ?>"><i class="bi <?= $this->tampil === 'ikon' ? 'bi-list-ul' : 'bi-grid-3x3-gap' ?>"></i></a>
+<?php if ($this->mode === 'folder' && $this->bisaTulis) : ?>
+                        <button class="btn btn-outline-success" type="button" data-bs-toggle="modal" data-bs-target="#berkasFolderBaru"><i class="bi bi-folder-plus"></i><span class="d-none d-md-inline ms-1">Folder baru</span></button>
+                        <button class="btn btn-success fw-semibold" type="button" data-bs-toggle="collapse" data-bs-target="#berkasUnggah" aria-expanded="false"><i class="bi bi-cloud-arrow-up"></i><span class="d-none d-md-inline ms-1">Unggah</span></button>
+<?php endif ?>
+<?php if ($this->mode === 'sampah' && $this->isi) : ?>
+                        <form method="post">
+                            <?= $csrf ?><?= $balik ?><input type="hidden" name="aksi" value="kosongkan_sampah">
+                            <button class="btn btn-outline-danger" data-judul="Kosongkan Tempat Sampah" data-tombol="Hapus Permanen" data-bahaya="1" data-konfirmasi="Semua berkas di tempat sampah akan <b>dihapus permanen</b> dan tidak bisa dikembalikan. Lanjutkan?"><i class="bi bi-trash3"></i><span class="d-none d-md-inline ms-1">Kosongkan</span></button>
+                        </form>
+<?php endif ?>
+                    </div>
+
+                    <h2 class="h6 mb-2">
+<?php if ($this->jejak) : ?>
+                        <nav aria-label="Lokasi folder" class="d-inline">
+<?php foreach ($this->jejak as $i => $j) : ?>
+<?= $i > 0 ? ' <span class="text-body-secondary">/</span> ' : '' ?><?php if ($i === count($this->jejak) - 1) : ?><span><?= $this->escapeHtml($j['nama']) ?></span><?php else : ?><a href="<?= $this->escapeHtmlAttr($j['kode'] !== null ? $alamat(['folder' => $j['kode'], 'tampil' => $this->tampil === 'ikon' ? 'ikon' : null]) : $alamat(['lihat' => $j['lihat'], 'tampil' => $this->tampil === 'ikon' ? 'ikon' : null])) ?>"><?= $this->escapeHtml($j['nama']) ?></a><?php endif ?>
+<?php endforeach ?>
+                        </nav>
+<?php else : ?>
+                        <?= $this->escapeHtml($judulMode) ?>
+<?php endif ?>
+<?php if ($this->mode === 'folder' && ! $this->milikSaya) : ?>
+                        <span class="badge text-bg-secondary ms-1"><?= $this->bisaTulis ? 'boleh menulis' : 'hanya baca' ?></span>
+<?php endif ?>
+                    </h2>
+<?php if ($this->mode === 'cari') : ?>
+                    <p class="small text-body-secondary"><?= count($this->isi) ?> hasil untuk "<?= $this->escapeHtml($this->cari) ?>" di berkas Anda dan yang dibagikan kepada Anda. <a href="<?= $this->escapeHtmlAttr($dasar) ?>">Hapus pencarian</a></p>
+<?php elseif ($this->mode === 'sampah') : ?>
+                    <p class="small text-body-secondary">Berkas di tempat sampah dihapus permanen otomatis setelah <?= (int) $this->sampahHari ?> hari, dan tetap dihitung dalam kuota.</p>
+<?php endif ?>
+
+<?php if ($this->mode === 'folder' && $this->bisaTulis) : ?>
+                    <div class="collapse mb-3" id="berkasUnggah">
+                        <div class="berkas-tarik p-3" id="berkasTarik"
+                            data-lokasi="<?= $this->escapeHtmlAttr($this->lokasiAktif) ?>"
+                            data-folder="<?= $this->escapeHtmlAttr((string) $this->folder?->kode) ?>"
+                            data-csrf-nama="<?= $this->escapeHtmlAttr($this->fieldCsrf) ?>"
+                            data-csrf="<?= $this->escapeHtmlAttr($this->tokenCsrf) ?>"
+                            data-potongan="<?= (int) $this->ukuranPotongan ?>"
+                            data-maks="<?= (int) $this->unggahMaks ?>"
+                            data-alamat="<?= $this->escapeHtmlAttr($dasar) ?>">
+                            <div class="d-flex flex-wrap gap-2 mb-2">
+                                <label class="btn btn-outline-success btn-sm mb-0"><i class="bi bi-file-earmark-plus me-1"></i>Pilih file<input type="file" multiple hidden id="berkasPilihFile"></label>
+                                <label class="btn btn-outline-success btn-sm mb-0"><i class="bi bi-folder-plus me-1"></i>Pilih folder<input type="file" webkitdirectory multiple hidden id="berkasPilihFolder"></label>
+                            </div>
+                            <div class="small text-body-secondary">Atau tarik file ke sini. File besar dikirim bertahap. Jenis yang diizinkan: <?= $this->escapeHtml($this->jenisBerkas) ?>.</div>
+                            <ul class="list-unstyled small mt-2 mb-0" id="berkasDaftarUnggah"></ul>
+                        </div>
+                    </div>
+<?php endif ?>
+
+<?php if (! $this->isi) : ?>
+                    <p class="text-body-secondary my-4 text-center"><?= match ($this->mode) {
+                        'cari'   => 'Tidak ada berkas yang cocok.',
+                        'sampah' => 'Tempat sampah kosong.',
+                        'bagi'   => 'Belum ada berkas yang dibagikan kepada Anda.',
+                        default  => 'Folder ini kosong.' . ($this->bisaTulis ? ' Unggah file atau buat folder baru.' : ''),
+                    } ?></p>
+<?php else : ?>
+<?php
+// Menu tindakan satu berkas (⋮).
+$menu = function (array $b) use ($csrf, $balik): string {
+    $e  = fn (string $s): string => $this->escapeHtmlAttr($s);
+    $h  = [];
+    if ($this->mode === 'sampah') {
+        $h[] = '<li><form method="post">' . $csrf . $balik . '<input type="hidden" name="aksi" value="pulihkan"><input type="hidden" name="kode" value="' . $e($b['kode']) . '"><button class="dropdown-item"><i class="bi bi-arrow-counterclockwise me-2"></i>Pulihkan</button></form></li>';
+        $h[] = '<li><form method="post">' . $csrf . $balik . '<input type="hidden" name="aksi" value="hapus_permanen"><input type="hidden" name="kode" value="' . $e($b['kode']) . '"><button class="dropdown-item text-danger" data-judul="Hapus Permanen" data-tombol="Hapus Permanen" data-bahaya="1" data-konfirmasi="' . $e('<b>' . $this->escapeHtml($b['nama']) . '</b> akan dihapus permanen dan tidak bisa dikembalikan. Lanjutkan?') . '"><i class="bi bi-trash3 me-2"></i>Hapus permanen</button></form></li>';
+    } else {
+        if ($b['folder']) {
+            $h[] = '<li><a class="dropdown-item" href="' . $e($b['alamat']) . '"><i class="bi bi-folder2-open me-2"></i>Buka</a></li>';
+        } else {
+            if ($b['pratinjau'] !== null) {
+                $tulisLihat = in_array($b['hak'], ['pemilik', 'tulis'], true) && $b['sistem'] === null;
+                $h[] = '<li><button type="button" class="dropdown-item berkas-lihat" data-jenis="' . $e($b['pratinjau']) . '" data-alamat="' . $e($b['alamat']) . '" data-nama="' . $e($b['nama']) . '" data-kode="' . $e($b['kode']) . '" data-tulis="' . ($tulisLihat ? '1' : '') . '" data-milik="' . ($b['milikSaya'] ? '1' : '') . '"' . '><i class="bi bi-eye me-2"></i>Lihat</button></li>';
+            }
+            $h[] = '<li><a class="dropdown-item" href="' . $e($b['alamatUnduh']) . '"><i class="bi bi-download me-2"></i>Unduh</a></li>';
+        }
+        $tulis = in_array($b['hak'], ['pemilik', 'tulis'], true) && $b['sistem'] === null;
+        if ($tulis || $b['milikSaya']) {
+            $h[] = '<li><hr class="dropdown-divider"></li>';
+        }
+        if ($tulis) {
+            $h[] = '<li><button type="button" class="dropdown-item berkas-ganti-nama" data-kode="' . $e($b['kode']) . '" data-nama="' . $e($b['nama']) . '"><i class="bi bi-pencil me-2"></i>Ganti nama</button></li>';
+        }
+        if ($b['milikSaya'] && $b['sistem'] === null) {
+            $h[] = '<li><button type="button" class="dropdown-item berkas-pindah" data-kode="' . $e($b['kode']) . '" data-nama="' . $e($b['nama']) . '"><i class="bi bi-folder-symlink me-2"></i>Pindah</button></li>';
+        }
+        if ($b['milikSaya']) {
+            $h[] = '<li><button type="button" class="dropdown-item berkas-bagi" data-kode="' . $e($b['kode']) . '" data-nama="' . $e($b['nama']) . '"><i class="bi bi-share me-2"></i>Bagikan</button></li>';
+        }
+        if ($tulis) {
+            $h[] = '<li><hr class="dropdown-divider"></li><li><form method="post">' . $csrf . $balik . '<input type="hidden" name="aksi" value="buang"><input type="hidden" name="kode" value="' . $e($b['kode']) . '"><button class="dropdown-item text-danger-emphasis"><i class="bi bi-trash me-2"></i>Buang ke sampah</button></form></li>';
+        }
+    }
+
+    return '<div class="dropdown"><button class="btn btn-sm btn-link text-body p-0 px-1" type="button" data-bs-toggle="dropdown" data-bs-popper-config=\'{"strategy":"fixed"}\' aria-expanded="false" aria-label="Tindakan untuk ' . $e($b['nama']) . '"><i class="bi bi-three-dots-vertical"></i></button><ul class="dropdown-menu dropdown-menu-end">' . implode('', $h) . '</ul></div>';
+};
+$buka = function (array $b): string {
+    if ($b['folder']) {
+        return 'href="' . $this->escapeHtmlAttr($b['alamat']) . '"';
+    }
+    if ($this->mode !== 'sampah' && $b['pratinjau'] !== null) {
+        $tulis = in_array($b['hak'], ['pemilik', 'tulis'], true) && $b['sistem'] === null;
+
+        return 'href="' . $this->escapeHtmlAttr($b['alamat']) . '" data-lihat="1" data-jenis="' . $this->escapeHtmlAttr($b['pratinjau']) . '" data-alamat="' . $this->escapeHtmlAttr($b['alamat']) . '" data-nama="' . $this->escapeHtmlAttr($b['nama'])
+            . '" data-kode="' . $this->escapeHtmlAttr($b['kode']) . '" data-tulis="' . ($tulis ? '1' : '') . '" data-milik="' . ($b['milikSaya'] ? '1' : '') . '"';
+    }
+
+    return $this->mode === 'sampah' ? '' : 'href="' . $this->escapeHtmlAttr((string) $b['alamatUnduh']) . '"';
+};
+?>
+<?php if ($this->tampil === 'ikon') : ?>
+                    <div class="berkas-grid">
+<?php foreach ($this->isi as $b) : ?>
+                        <div class="berkas-kartu" data-berkas-item>
+                            <a <?= $buka($b) ?> class="text-decoration-none text-body d-block">
+<?php if ($b['alamatKecil'] && $this->mode !== 'sampah') : ?>
+                                <img class="berkas-gambar" src="<?= $this->escapeHtmlAttr($b['alamatKecil']) ?>" alt="" loading="lazy">
+<?php else : ?>
+                                <div class="berkas-ikon-besar"><i class="bi bi-<?= $this->escapeHtmlAttr($b['ikon']) ?>"></i></div>
+<?php endif ?>
+                                <div class="berkas-nama" title="<?= $this->escapeHtmlAttr($b['nama']) ?>"><?= $this->escapeHtml($b['nama']) ?></div>
+                            </a>
+<?php if ($b['dibagikan']) : ?>
+                            <i class="bi bi-people-fill text-success position-absolute top-0 start-0 m-2" title="Dibagikan"></i>
+<?php endif ?>
+                            <?= $menu($b) ?>
+                        </div>
+<?php endforeach ?>
+                    </div>
+<?php else : ?>
+                    <div class="table-responsive">
+                        <table class="table table-hover berkas-tabel mb-0">
+                            <thead><tr><th>Nama</th><th class="text-end d-none d-sm-table-cell">Ukuran</th><th class="d-none d-md-table-cell"><?= $this->mode === 'sampah' ? 'Dibuang' : 'Diubah' ?></th><th></th></tr></thead>
+                            <tbody>
+<?php foreach ($this->isi as $b) : ?>
+                                <tr data-berkas-item>
+                                    <td class="berkas-nama">
+                                        <span class="berkas-ikon me-2"><i class="bi bi-<?= $this->escapeHtmlAttr($b['ikon']) ?>"></i></span><a <?= $buka($b) ?>><?= $this->escapeHtml($b['nama']) ?></a>
+<?php if ($b['dibagikan']) : ?>
+                                        <i class="bi bi-people-fill text-success ms-1" title="Dibagikan"></i>
+<?php endif ?>
+<?php if (! $b['milikSaya']) : ?>
+                                        <span class="badge text-bg-light border ms-1"><?= $b['hak'] === 'tulis' ? 'boleh menulis' : 'hanya baca' ?></span>
+<?php endif ?>
+<?php if (isset($b['jalur'])) : ?>
+                                        <div class="small text-body-secondary"><?= $this->escapeHtml($b['jalur']) ?></div>
+<?php elseif (isset($b['asal'])) : ?>
+                                        <div class="small text-body-secondary">dari <?= $this->escapeHtml($b['asal']) ?></div>
+<?php endif ?>
+                                    </td>
+                                    <td class="text-end small text-nowrap d-none d-sm-table-cell"><?= $this->escapeHtml($b['ukuranTeks']) ?></td>
+                                    <td class="small text-nowrap d-none d-md-table-cell"><?= $this->escapeHtml($b['dibuangTeks'] ?? $b['diubahTeks']) ?></td>
+                                    <td class="text-end"><?= $menu($b) ?></td>
+                                </tr>
+<?php endforeach ?>
+                            </tbody>
+                        </table>
+                    </div>
+<?php endif ?>
+<?php endif ?>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<?php if ($this->mode === 'folder' && $this->bisaTulis) : ?>
+<div class="modal fade" id="berkasFolderBaru" tabindex="-1" aria-labelledby="berkasFolderBaruJudul" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form method="post" class="modal-content" autocomplete="off">
+            <?= $csrf ?><?= $balik ?>
+            <input type="hidden" name="aksi" value="buat_folder">
+            <input type="hidden" name="lokasi" value="<?= $this->escapeHtmlAttr($this->lokasiAktif) ?>">
+            <input type="hidden" name="folder" value="<?= $this->escapeHtmlAttr((string) $this->folder?->kode) ?>">
+            <div class="modal-header"><h2 class="modal-title h5" id="berkasFolderBaruJudul">Folder Baru</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button></div>
+            <div class="modal-body"><label class="form-label" for="berkasNamaFolder">Nama folder</label><input class="form-control" id="berkasNamaFolder" name="nama" required maxlength="255"></div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button><button class="btn btn-success fw-semibold">Buat</button></div>
+        </form>
+    </div>
+</div>
+<?php endif ?>
+
+<ul class="dropdown-menu berkas-konteks" id="berkasKonteks" role="menu" aria-label="Tindakan berkas"></ul>
+
+<div class="modal fade" id="dapurDialog" tabindex="-1" aria-labelledby="dapurDialogJudul" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content" id="dapurDialogForm" autocomplete="off">
+            <div class="modal-header"><h2 class="modal-title h5" id="dapurDialogJudul"></h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button></div>
+            <div class="modal-body">
+                <div id="dapurDialogPesan"></div>
+                <input class="form-control mt-2 d-none" id="dapurDialogIsian" maxlength="255" aria-label="Isian">
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="dapurDialogBatal">Batal</button><button class="btn btn-success fw-semibold" id="dapurDialogYa"></button></div>
+        </form>
+    </div>
+</div>
+
+<form method="post" id="berkasFormGantiNama" hidden><?= $csrf ?><?= $balik ?><input type="hidden" name="aksi" value="ganti_nama"><input type="hidden" name="kode"><input type="hidden" name="nama"></form>
+
+<div class="modal fade" id="berkasPratinjau" tabindex="-1" aria-labelledby="berkasPratinjauJudul" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title h6 text-truncate flex-grow-1 me-2" id="berkasPratinjauJudul"></h2>
+                <input class="form-control form-control-sm flex-grow-1 me-2 d-none" id="berkasPratinjauNama" maxlength="255" aria-label="Nama berkas">
+                <button type="button" class="btn btn-sm btn-outline-success me-2 d-none" id="berkasPratinjauBagi"><i class="bi bi-share"></i><span class="d-none d-sm-inline ms-1">Bagikan</span></button>
+                <a class="btn btn-sm btn-outline-success me-2" id="berkasPratinjauUnduh" href="#"><i class="bi bi-download"></i><span class="d-none d-sm-inline ms-1">Unduh</span></a>
+                <button type="button" class="btn btn-sm btn-outline-danger me-2 d-none" id="berkasPratinjauBuang"><i class="bi bi-trash"></i><span class="d-none d-sm-inline ms-1">Hapus</span></button>
+                <button type="button" class="btn-close ms-0" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
+            <div class="modal-body"></div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="berkasPindah" tabindex="-1" aria-labelledby="berkasPindahJudul" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form method="post" class="modal-content">
+            <?= $csrf ?><?= $balik ?>
+            <input type="hidden" name="aksi" value="pindah"><input type="hidden" name="kode">
+            <div class="modal-header"><h2 class="modal-title h5" id="berkasPindahJudul">Pindah</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button></div>
+            <div class="modal-body">
+                <p class="mb-2 berkas-pindah-nama fw-semibold"></p>
+                <label class="form-label" for="berkasPindahTujuan">Ke folder</label>
+                <select class="form-select" id="berkasPindahTujuan" name="tujuan"></select>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button><button class="btn btn-success fw-semibold">Pindah</button></div>
+        </form>
+    </div>
+</div>
+
+<div class="modal fade" id="berkasBagi" tabindex="-1" aria-labelledby="berkasBagiJudul" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header"><h2 class="modal-title h5 text-truncate" id="berkasBagiJudul">Bagikan</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button></div>
+            <div class="modal-body">
+                <div class="alert d-none small py-2" id="berkasBagiPesan"></div>
+                <h3 class="h6">Sudah dibagikan ke</h3>
+                <ul class="list-group mb-3" id="berkasBagiDaftar"></ul>
+                <h3 class="h6">Bagikan ke orang</h3>
+                <form class="row g-2 mb-3 berkas-bagi-form" data-aksi="bagi_email" autocomplete="off">
+                    <div class="col-sm-6"><input class="form-control" type="email" name="email" required placeholder="email akun" aria-label="Email akun"></div>
+                    <div class="col-sm-3"><select class="form-select" name="hak" aria-label="Hak"><option value="baca">Hanya baca</option><option value="tulis">Boleh menulis</option></select></div>
+                    <div class="col-sm-3"><button class="btn btn-success w-100">Bagikan</button></div>
+                </form>
+                <h3 class="h6">Bagikan ke semua anggota website ini</h3>
+                <form class="row g-2 mb-3 berkas-bagi-form" data-aksi="bagi_lingkup">
+                    <div class="col-sm-6 small text-body-secondary align-self-center"><?= $this->escapeHtml($this->lingkup === 'dashboard' ? 'Semua anggota dashboard utama' : 'Semua anggota ' . $this->lingkup) ?></div>
+                    <div class="col-sm-3"><select class="form-select" name="hak" aria-label="Hak"><option value="baca">Hanya baca</option><option value="tulis">Boleh menulis</option></select></div>
+                    <div class="col-sm-3"><button class="btn btn-outline-success w-100">Bagikan</button></div>
+                </form>
+                <h3 class="h6">Tautan publik</h3>
+                <p class="small text-body-secondary mb-2">Siapa pun yang memegang tautan bisa melihat (tanpa login). Foto dikirim tanpa data lokasi (EXIF).</p>
+                <form class="row g-2 berkas-bagi-form" data-aksi="tautan">
+                    <div class="col-sm-6"><select class="form-select" name="hari" aria-label="Masa berlaku"><option value="1">Berlaku 1 hari</option><option value="7" selected>Berlaku 7 hari</option><option value="30">Berlaku 30 hari</option><option value="">Tanpa batas waktu</option></select></div>
+                    <div class="col-sm-6"><button class="btn btn-outline-success w-100"><i class="bi bi-link-45deg me-1"></i>Buat tautan</button></div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(() => {
+    const dasar = <?= json_encode($dasar) ?>;
+    const csrfNama = <?= json_encode($this->fieldCsrf) ?>;
+    const csrf = <?= json_encode($this->tokenCsrf) ?>;
+    const lokasiAktif = <?= json_encode($this->lokasiAktif) ?>;
+
+    const kirim = async (data) => {
+        const form = new FormData();
+        form.append(csrfNama, csrf);
+        form.append('json', '1');
+        for (const [k, v] of Object.entries(data)) {
+            form.append(k, v);
+        }
+        const jawab = await fetch(dasar, { method: 'POST', body: form, credentials: 'same-origin' });
+        let isi = {};
+        try { isi = await jawab.json(); } catch (_) { isi = { galat: 'Server menjawab ' + jawab.status + '.' }; }
+        if (!jawab.ok || isi.galat) {
+            throw new Error(isi.galat || ('Server menjawab ' + jawab.status + '.'));
+        }
+        return isi;
+    };
+    const teksAman = (s) => { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
+    // Jendela dialog dashboard pengganti confirm()/prompt()/alert() browser, agar serasi dengan tema dan pesannya bisa
+    // berformat. pesan berupa HTML yang sudah aman (nama dari server sudah di-escape; dari JavaScript lewat teksAman).
+    const dialog = (() => {
+        const el = document.getElementById('dapurDialog');
+        const isian = document.getElementById('dapurDialogIsian');
+        const ya = document.getElementById('dapurDialogYa');
+        const batal = document.getElementById('dapurDialogBatal');
+        let selesai = null;
+        el.addEventListener('hidden.bs.modal', () => { if (selesai) { const s = selesai; selesai = null; s(null); } });
+        document.getElementById('dapurDialogForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const s = selesai;
+            selesai = null;
+            bootstrap.Modal.getOrCreateInstance(el).hide();
+            s?.(isian.classList.contains('d-none') ? true : isian.value);
+        });
+        el.addEventListener('shown.bs.modal', () => (isian.classList.contains('d-none') ? ya : isian).focus());
+        return ({ judul = 'Konfirmasi', pesan = '', tombol = 'Ya', bahaya = false, nilai = null, tanpaBatal = false }) => new Promise((hasil) => {
+            selesai = hasil;
+            el.querySelector('.modal-title').textContent = judul;
+            document.getElementById('dapurDialogPesan').innerHTML = pesan;
+            isian.classList.toggle('d-none', nilai === null);
+            isian.value = nilai ?? '';
+            ya.textContent = tombol;
+            ya.className = 'btn fw-semibold ' + (bahaya ? 'btn-danger' : 'btn-success');
+            batal.classList.toggle('d-none', tanpaBatal);
+            bootstrap.Modal.getOrCreateInstance(el).show();
+            if (nilai !== null) {
+                el.addEventListener('shown.bs.modal', () => {
+                    const titik = isian.value.lastIndexOf('.');
+                    isian.setSelectionRange(0, titik > 0 ? titik : isian.value.length);
+                }, { once: true });
+            }
+        });
+    })();
+    const teksDialog = (s) => { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
+    const pesanGalat = (teks) => dialog({ judul: 'Tidak Berhasil', pesan: teksDialog(teks), tombol: 'Tutup', tanpaBatal: true });
+
+    // Tombol dalam form dengan data-konfirmasi: tanyakan dulu, baru kirim form.
+    document.addEventListener('click', async (e) => {
+        const tombol = e.target.closest('[data-konfirmasi]');
+        if (!tombol) {
+            return;
+        }
+        e.preventDefault();
+        const form = tombol.closest('form');
+        const ok = await dialog({
+            judul: tombol.dataset.judul || 'Konfirmasi',
+            pesan: tombol.dataset.konfirmasi,
+            tombol: tombol.dataset.tombol || 'Ya',
+            bahaya: tombol.dataset.bahaya === '1',
+        });
+        if (ok && form) {
+            form.submit();
+        }
+    });
+
+
+    // Pratinjau.
+    const modalLihat = document.getElementById('berkasPratinjau');
+    const delegasi = (pemilih, fungsi) => document.addEventListener('click', (e) => {
+        const el = e.target.closest(pemilih);
+        if (el) {
+            fungsi(el, e);
+        }
+    });
+
+    // Menu klik kanan (dan tekan lama di layar sentuh): salinan menu ⋮ milik berkas itu, di posisi penunjuk.
+    const konteks = document.getElementById('berkasKonteks');
+    const tutupKonteks = () => konteks.classList.remove('show');
+    document.addEventListener('contextmenu', (e) => {
+        const item = e.target.closest('[data-berkas-item]');
+        const menu = item?.querySelector('.dropdown-menu');
+        if (!menu) {
+            return;
+        }
+        e.preventDefault();
+        konteks.innerHTML = menu.innerHTML;
+        konteks.classList.add('show');
+        const lebar = konteks.offsetWidth, tinggi = konteks.offsetHeight;
+        konteks.style.left = Math.max(4, Math.min(e.clientX, window.innerWidth - lebar - 4)) + 'px';
+        konteks.style.top = Math.max(4, Math.min(e.clientY, window.innerHeight - tinggi - 4)) + 'px';
+        konteks.querySelector('.dropdown-item')?.focus();
+    });
+    document.addEventListener('click', (e) => { if (!konteks.contains(e.target) || e.target.closest('.dropdown-item')) { setTimeout(tutupKonteks); } });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { tutupKonteks(); } });
+    window.addEventListener('scroll', tutupKonteks, true);
+    window.addEventListener('resize', tutupKonteks);
+
+    delegasi('.berkas-lihat, [data-lihat]', (el, e) => {
+        e.preventDefault();
+        const { jenis, alamat, nama } = el.dataset;
+        const badan = modalLihat.querySelector('.modal-body');
+        lihatAktif = { kode: el.dataset.kode, nama, tulis: el.dataset.tulis === '1' };
+        const judul = document.getElementById('berkasPratinjauJudul');
+        judul.textContent = nama;
+        judul.classList.toggle('berkas-bisa-ganti', lihatAktif.tulis);
+        judul.title = lihatAktif.tulis ? 'Klik untuk mengganti nama' : '';
+        judul.classList.remove('d-none');
+        document.getElementById('berkasPratinjauNama').classList.add('d-none');
+        document.getElementById('berkasPratinjauBagi').classList.toggle('d-none', el.dataset.milik !== '1');
+        document.getElementById('berkasPratinjauBuang').classList.toggle('d-none', !lihatAktif.tulis);
+        document.getElementById('berkasPratinjauUnduh').href = alamat + '?unduh=1';
+        badan.replaceChildren();
+        let isi;
+        if (jenis === 'gambar') { isi = document.createElement('img'); isi.alt = nama; }
+        else if (jenis === 'video') { isi = document.createElement('video'); isi.controls = true; }
+        else if (jenis === 'audio') { isi = document.createElement('audio'); isi.controls = true; isi.className = 'w-100'; }
+        else { isi = document.createElement('iframe'); isi.title = nama; if (jenis === 'teks') { isi.setAttribute('sandbox', ''); } }
+        isi.src = alamat;
+        badan.append(isi);
+        bootstrap.Modal.getOrCreateInstance(modalLihat).show();
+    });
+    let lihatAktif = null;
+    let perluMuatUlang = false;
+    modalLihat.addEventListener('hidden.bs.modal', () => {
+        modalLihat.querySelector('.modal-body').replaceChildren();
+        if (perluMuatUlang) {
+            location.reload();
+        }
+    });
+
+    // Nama di kepala pratinjau: klik untuk berubah menjadi kotak isian; Enter/keluar = simpan, Esc = batal.
+    const judulLihat = document.getElementById('berkasPratinjauJudul');
+    const isianNama = document.getElementById('berkasPratinjauNama');
+    judulLihat.addEventListener('click', () => {
+        if (!lihatAktif?.tulis) {
+            return;
+        }
+        isianNama.value = lihatAktif.nama;
+        judulLihat.classList.add('d-none');
+        isianNama.classList.remove('d-none', 'is-invalid');
+        isianNama.focus();
+        const titik = lihatAktif.nama.lastIndexOf('.');
+        isianNama.setSelectionRange(0, titik > 0 ? titik : lihatAktif.nama.length);
+    });
+    let simpanNama = async (batal) => {
+        if (isianNama.classList.contains('d-none')) {
+            return;
+        }
+        const baru = isianNama.value.trim();
+        if (batal || baru === '' || baru === lihatAktif.nama) {
+            isianNama.classList.add('d-none');
+            judulLihat.classList.remove('d-none');
+            return;
+        }
+        try {
+            const isi = await kirim({ aksi: 'ganti_nama', kode: lihatAktif.kode, nama: baru });
+            const nama = (isi.pesan.match(/"(.*)"/) || [null, baru])[1];
+            lihatAktif.nama = nama;
+            judulLihat.textContent = nama;
+            isianNama.classList.add('d-none');
+            judulLihat.classList.remove('d-none');
+            perluMuatUlang = true;
+        } catch (err) {
+            // Batalkan isian dulu agar tidak tersimpan ulang saat fokus pindah ke jendela pesan.
+            isianNama.classList.add('d-none');
+            judulLihat.classList.remove('d-none');
+            pesanGalat(err.message);
+        }
+    };
+    isianNama.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); simpanNama(false); }
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); simpanNama(true); }
+    });
+    isianNama.addEventListener('blur', () => simpanNama(false));
+
+    document.getElementById('berkasPratinjauBuang').addEventListener('click', async () => {
+        if (!lihatAktif || !(await dialog({ judul: 'Buang ke Tempat Sampah', pesan: 'Buang <b>' + teksAman(lihatAktif.nama) + '</b> ke tempat sampah? Berkas masih bisa dipulihkan selama ' + <?= (int) $this->sampahHari ?> + ' hari.', tombol: 'Buang', bahaya: true }))) {
+            return;
+        }
+        try {
+            await kirim({ aksi: 'buang', kode: lihatAktif.kode });
+            perluMuatUlang = true;
+            bootstrap.Modal.getOrCreateInstance(modalLihat).hide();
+        } catch (err) {
+            pesanGalat(err.message);
+        }
+    });
+    document.getElementById('berkasPratinjauBagi').addEventListener('click', () => {
+        if (!lihatAktif) {
+            return;
+        }
+        const data = { kode: lihatAktif.kode, nama: lihatAktif.nama };
+        modalLihat.addEventListener('hidden.bs.modal', () => bukaBagi(data.kode, data.nama), { once: true });
+        bootstrap.Modal.getOrCreateInstance(modalLihat).hide();
+    });
+
+    // Ganti nama.
+    delegasi('.berkas-ganti-nama', async (el) => {
+        const baru = await dialog({ judul: 'Ganti Nama', pesan: 'Nama baru untuk <b>' + teksAman(el.dataset.nama) + '</b>:', tombol: 'Simpan', nilai: el.dataset.nama });
+        if (baru && baru !== el.dataset.nama) {
+            const f = document.getElementById('berkasFormGantiNama');
+            f.querySelector('[name=kode]').value = el.dataset.kode;
+            f.querySelector('[name=nama]').value = baru;
+            f.submit();
+        }
+    });
+
+    // Pindah: pilihan folder diambil dari server.
+    const modalPindah = document.getElementById('berkasPindah');
+    delegasi('.berkas-pindah', async (el) => {
+        modalPindah.querySelector('[name=kode]').value = el.dataset.kode;
+        modalPindah.querySelector('.berkas-pindah-nama').textContent = el.dataset.nama;
+        const pilih = modalPindah.querySelector('select');
+        pilih.innerHTML = '<option>Memuat…</option>';
+        bootstrap.Modal.getOrCreateInstance(modalPindah).show();
+        try {
+            const jawab = await fetch(dasar + '?daftar_folder=1&lokasi=' + encodeURIComponent(lokasiAktif), { credentials: 'same-origin' });
+            const isi = await jawab.json();
+            pilih.innerHTML = '<option value="">' + teksAman(isi.akar || 'Akar') + '</option>' + isi.folder
+                .filter((f) => f.kode !== el.dataset.kode)
+                .map((f) => '<option value="' + teksAman(f.kode) + '">' + teksAman(isi.akar + ' / ' + f.jalur) + '</option>').join('');
+        } catch (_) {
+            pilih.innerHTML = '<option value="">Daftar folder tidak bisa dimuat</option>';
+        }
+    });
+
+    // Bagikan.
+    const modalBagi = document.getElementById('berkasBagi');
+    let kodeBagi = '';
+    const pesanBagi = (teks, galat) => {
+        const p = document.getElementById('berkasBagiPesan');
+        p.className = 'alert small py-2 ' + (galat ? 'alert-danger' : 'alert-success');
+        p.innerHTML = teks;
+    };
+    const muatBagi = async () => {
+        const daftar = document.getElementById('berkasBagiDaftar');
+        daftar.innerHTML = '<li class="list-group-item small text-body-secondary">Memuat…</li>';
+        const jawab = await fetch(dasar + '?bagi=' + encodeURIComponent(kodeBagi), { credentials: 'same-origin' });
+        const isi = await jawab.json();
+        if (!isi.bagi.length) {
+            daftar.innerHTML = '<li class="list-group-item small text-body-secondary">Belum dibagikan.</li>';
+            return;
+        }
+        daftar.innerHTML = isi.bagi.map((b) => {
+            const label = b.jenis === 'tautan'
+                ? '<i class="bi bi-link-45deg me-1"></i><a href="' + teksAman(b.tujuan) + '" target="_blank" rel="noopener" class="text-break">' + teksAman(location.origin + b.tujuan) + '</a>' + (b.sampai ? ' <span class="text-body-secondary">(sampai ' + teksAman(b.sampai) + ')</span>' : '')
+                : (b.jenis === 'user' ? '<i class="bi bi-person me-1"></i>' + teksAman(b.nama ? b.nama + ' (' + b.tujuan + ')' : b.tujuan) : '<i class="bi bi-people me-1"></i>Anggota ' + teksAman(b.tujuan === 'dashboard' ? 'dashboard utama' : b.tujuan));
+            return '<li class="list-group-item d-flex justify-content-between align-items-center gap-2 small"><span>' + label
+                + ' <span class="badge text-bg-light border">' + (b.hak === 'tulis' ? 'boleh menulis' : 'hanya baca') + '</span></span>'
+                + (b.jenis === 'tautan' ? '<button type="button" class="btn btn-sm btn-link berkas-salin" data-tautan="' + teksAman(location.origin + b.tujuan) + '" title="Salin tautan"><i class="bi bi-clipboard"></i></button>' : '')
+                + '<button type="button" class="btn btn-sm btn-link text-danger-emphasis berkas-cabut" data-id="' + b.id + '" title="Cabut"><i class="bi bi-x-circle"></i></button></li>';
+        }).join('');
+    };
+    const bukaBagi = (kode, nama) => {
+        kodeBagi = kode;
+        modalBagi.querySelector('.modal-title').textContent = 'Bagikan: ' + nama;
+        document.getElementById('berkasBagiPesan').className = 'alert d-none';
+        bootstrap.Modal.getOrCreateInstance(modalBagi).show();
+        muatBagi();
+    };
+    delegasi('.berkas-bagi', (el) => bukaBagi(el.dataset.kode, el.dataset.nama));
+    modalBagi.querySelectorAll('.berkas-bagi-form').forEach((f) => f.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const data = { aksi: f.dataset.aksi, kode: kodeBagi };
+        new FormData(f).forEach((v, k) => { data[k] = v; });
+        try {
+            const isi = await kirim(data);
+            pesanBagi(teksAman(isi.pesan) + (isi.alamat ? ' <a href="' + teksAman(isi.alamat) + '" target="_blank" rel="noopener">' + teksAman(location.origin + isi.alamat) + '</a>' : ''), false);
+            f.reset();
+            muatBagi();
+        } catch (err) {
+            pesanBagi(teksAman(err.message), true);
+        }
+    }));
+    document.getElementById('berkasBagiDaftar').addEventListener('click', async (e) => {
+        const salin = e.target.closest('.berkas-salin');
+        if (salin) {
+            navigator.clipboard?.writeText(salin.dataset.tautan).then(() => pesanBagi('Tautan disalin.', false));
+            return;
+        }
+        const cabut = e.target.closest('.berkas-cabut');
+        if (cabut && await dialog({ judul: 'Cabut Berbagi', pesan: 'Cabut berbagi ini? Orang atau tautan tersebut tidak bisa membuka berkas ini lagi.', tombol: 'Cabut', bahaya: true })) {
+            try {
+                await kirim({ aksi: 'cabut_bagi', kode: kodeBagi, bagi_id: cabut.dataset.id });
+                pesanBagi('Berbagi dicabut.', false);
+                muatBagi();
+            } catch (err) {
+                pesanBagi(teksAman(err.message), true);
+            }
+        }
+    });
+    modalBagi.addEventListener('hidden.bs.modal', () => location.reload());
+
+    // Pohon folder di kiri: hanya terbuka lewat tanda panah. Klik nama lokasi atau membuka subfolder di panel kanan
+    // tidak membuka pohon. Keadaan terbuka/tertutup diingat di browser (localStorage).
+    const pohon = document.getElementById('berkasPohon');
+    const SIMPAN = 'dapur-berkas-pohon';
+    let keadaan = {};
+    try { keadaan = JSON.parse(localStorage.getItem(SIMPAN) || '{}') || {}; } catch (_) { keadaan = {}; }
+    const simpanKeadaan = () => { try { localStorage.setItem(SIMPAN, JSON.stringify(keadaan)); } catch (_) {} };
+    const folderAktif = pohon.dataset.folderAktif;
+    const alamatFolder = (kode) => dasar + '?folder=' + encodeURIComponent(kode) + (pohon.dataset.tampil ? '&tampil=ikon' : '');
+    const dataLokasi = {};
+
+    const buatCabang = (ul, daftar, induk, lokasi) => {
+        ul.replaceChildren();
+        for (const f of daftar.filter((x) => x.induk === induk)) {
+            const punyaAnak = daftar.some((x) => x.induk === f.kode);
+            const kunci = lokasi + ':' + f.kode;
+            const li = document.createElement('li');
+            li.innerHTML = '<div class="d-flex align-items-center"><button type="button" class="btn btn-sm btn-link text-body p-0 berkas-caret' + (punyaAnak ? '' : ' berkas-caret-kosong') + '" aria-expanded="false"><i class="bi bi-chevron-right"></i></button>'
+                + '<a class="nav-link flex-grow-1 text-truncate' + (f.kode === folderAktif ? ' active' : '') + '" href="' + teksAman(alamatFolder(f.kode)) + '"><i class="bi bi-folder me-2"></i>' + teksAman(f.nama) + '</a></div>'
+                + '<ul class="list-unstyled berkas-pohon mb-0" hidden></ul>';
+            const caret = li.querySelector('.berkas-caret');
+            const anak = li.querySelector('ul');
+            caret.setAttribute('aria-label', 'Buka atau tutup ' + f.nama);
+            const atur = (buka) => {
+                caret.setAttribute('aria-expanded', buka ? 'true' : 'false');
+                anak.hidden = !buka;
+                if (buka && !anak.childElementCount) { buatCabang(anak, daftar, f.kode, lokasi); }
+            };
+            caret.addEventListener('click', () => { keadaan[kunci] = anak.hidden; simpanKeadaan(); atur(anak.hidden); });
+            if (punyaAnak && keadaan[kunci]) { atur(true); }
+            ul.append(li);
+        }
+    };
+
+    pohon.querySelectorAll('.berkas-pohon-akar').forEach((akar) => {
+        const lokasi = akar.dataset.lokasi;
+        const kunci = 'lokasi:' + lokasi;
+        const caret = akar.querySelector(':scope > div > .berkas-caret');
+        const ul = akar.querySelector(':scope > ul');
+        const atur = async (buka) => {
+            caret.setAttribute('aria-expanded', buka ? 'true' : 'false');
+            ul.hidden = !buka;
+            if (!buka || dataLokasi[lokasi]) { return; }
+            try {
+                const jawab = await fetch(dasar + '?daftar_folder=1&lokasi=' + encodeURIComponent(lokasi), { credentials: 'same-origin' });
+                dataLokasi[lokasi] = (await jawab.json()).folder || [];
+            } catch (_) {
+                dataLokasi[lokasi] = [];
+            }
+            buatCabang(ul, dataLokasi[lokasi], null, lokasi);
+            if (!dataLokasi[lokasi].length) { caret.classList.add('berkas-caret-kosong'); }
+        };
+        caret.addEventListener('click', () => { keadaan[kunci] = ul.hidden; simpanKeadaan(); atur(ul.hidden); });
+        if (keadaan[kunci]) { atur(true); }
+    });
+
+    // Unggah bertahap: setiap file dipotong (bawaan 1 MB) dan dikirim berurutan.
+    const kotak = document.getElementById('berkasTarik');
+    if (!kotak) {
+        return;
+    }
+    const d = kotak.dataset;
+    const daftar = document.getElementById('berkasDaftarUnggah');
+    const antrean = [];
+    let berjalan = false;
+
+    const unggahSatu = async (file, jalur) => {
+        const baris = document.createElement('li');
+        const status = document.createElement('span');
+        status.className = 'text-body-secondary';
+        baris.append(document.createTextNode(jalur + ' '), status);
+        daftar.append(baris);
+        if (file.size > Number(d.maks)) {
+            status.className = 'text-danger';
+            status.textContent = 'terlalu besar';
+            return false;
+        }
+        let kode = '';
+        try {
+            kode = (await kirim({ aksi: 'unggah_mulai', lokasi: d.lokasi, folder: d.folder, file: jalur, ukuran: file.size })).kode;
+            const potongan = Number(d.potongan);
+            for (let nomor = 0, awal = 0; awal < file.size; nomor++, awal += potongan) {
+                await kirim({ aksi: 'unggah_potongan', kode_unggah: kode, nomor, potongan: file.slice(awal, awal + potongan) });
+                status.textContent = Math.min(100, Math.round((awal + potongan) / file.size * 100)) + '%';
+            }
+            const hasil = await kirim({ aksi: 'unggah_selesai', kode_unggah: kode });
+            status.className = 'text-success';
+            status.textContent = hasil.pesan || 'selesai';
+            return true;
+        } catch (e) {
+            status.className = 'text-danger';
+            status.textContent = e.message;
+            if (kode) {
+                kirim({ aksi: 'unggah_batal', kode_unggah: kode }).catch(() => {});
+            }
+            return false;
+        }
+    };
+    const jalankan = async () => {
+        if (berjalan) {
+            return;
+        }
+        berjalan = true;
+        let berhasil = 0, gagal = 0;
+        while (antrean.length) {
+            const [file, jalur] = antrean.shift();
+            if (await unggahSatu(file, jalur)) {
+                berhasil++;
+            } else {
+                gagal++;
+            }
+        }
+        berjalan = false;
+        if (berhasil > 0 && gagal === 0) {
+            // Semua berhasil: muat ulang daftar otomatis sebentar kemudian.
+            const muat = document.createElement('li');
+            muat.className = 'text-body-secondary';
+            muat.textContent = 'Selesai. Memuat ulang daftar…';
+            daftar.append(muat);
+            setTimeout(() => location.reload(), 800);
+        } else if (berhasil > 0) {
+            // Ada yang gagal: daftar tidak dimuat ulang otomatis agar pesan galatnya tetap terbaca.
+            const muat = document.createElement('li');
+            muat.innerHTML = '<a href="#" class="fw-semibold">Muat ulang daftar berkas</a>';
+            muat.querySelector('a').addEventListener('click', (e) => { e.preventDefault(); location.reload(); });
+            daftar.append(muat);
+        }
+    };
+    const tambah = (files) => {
+        for (const file of files) {
+            antrean.push([file, file.webkitRelativePath || file.name]);
+        }
+        bootstrap.Collapse.getOrCreateInstance(document.getElementById('berkasUnggah'), { toggle: false }).show();
+        jalankan();
+    };
+    document.getElementById('berkasPilihFile').addEventListener('change', (e) => { tambah(e.target.files); e.target.value = ''; });
+    document.getElementById('berkasPilihFolder').addEventListener('change', (e) => { tambah(e.target.files); e.target.value = ''; });
+    ['dragenter', 'dragover'].forEach((n) => kotak.addEventListener(n, (e) => { e.preventDefault(); kotak.classList.add('berkas-tarik-aktif'); }));
+    ['dragleave', 'drop'].forEach((n) => kotak.addEventListener(n, () => kotak.classList.remove('berkas-tarik-aktif')));
+    kotak.addEventListener('drop', (e) => { e.preventDefault(); tambah(e.dataTransfer.files); });
+})();
+</script>
