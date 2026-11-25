@@ -610,6 +610,31 @@ final class KelolaBerkas
         return $token;
     }
 
+    /** Mengubah hak berbagi ke akun atau anggota website (tautan publik selalu hanya baca). */
+    public function ubahHakBagi(int $userId, Berkas $b, int $bagiId, string $hak): void
+    {
+        $this->harusPemilik($userId, $b);
+        $ada = null;
+        foreach ($this->daftar->bagiBerkas($b->id) as $bagi) {
+            if ((int) $bagi['id'] === $bagiId) {
+                $ada = $bagi;
+            }
+        }
+
+        if ($ada === null) {
+            throw new GagalBerkas('Berbagi tidak ditemukan.');
+        }
+
+        if ($ada['token'] !== null) {
+            throw new GagalBerkas('Tautan publik selalu hanya baca.');
+        }
+
+        $hak = self::hakSah($hak);
+        $this->daftar->ubahHakBagi($bagiId, $b->id, $hak);
+        $tujuan = $ada['user_id'] !== null ? (string) ($ada['email'] ?? '') : 'anggota ' . (string) $ada['lingkup'];
+        $this->daftar->catat($b->id, $b->pemilikId, $userId, 'bagi', "{$tujuan} ({$hak})");
+    }
+
     public function cabutBagi(int $userId, Berkas $b, int $bagiId): void
     {
         $this->harusPemilik($userId, $b);
