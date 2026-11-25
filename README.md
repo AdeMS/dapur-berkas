@@ -88,7 +88,7 @@ return [
         'unggah_maks_mb' => 2048,                   // ukuran paling besar satu berkas
         // Lokasi tambahan: berkas milik satu akun disimpan di folder lain.
         'lokasi' => [
-            'foto' => ['path' => '/volume/Foto', 'pemilik' => 'nama@contoh.com', 'judul' => 'Foto'],
+            'foto' => ['path' => '/path/ke/foto', 'pemilik' => 'nama@contoh.com', 'judul' => 'Foto'],
         ],
     ],
 ];
