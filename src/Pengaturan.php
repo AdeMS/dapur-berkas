@@ -20,7 +20,7 @@ use Composer\InstalledVersions;
  *         'unggah_maks_mb' => 2048,
  *         // Lokasi tambahan (alias): berkas disimpan di folder lain, milik satu akun.
  *         'lokasi' => [
- *             'foto' => ['path' => '/volume/Foto', 'pemilik' => 'nama@contoh.com', 'judul' => 'Foto'],
+ *             'foto' => ['path' => '/path/ke/foto', 'pemilik' => 'nama@contoh.com', 'judul' => 'Foto'],
  *         ],
  *     ],
  *
