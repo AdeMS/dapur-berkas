@@ -266,7 +266,7 @@ $buka = function (array $b): string {
                                 <div class="berkas-nama" title="<?= $this->escapeHtmlAttr($b['nama']) ?>"><?= $this->escapeHtml($b['nama']) ?></div>
                             </a>
 <?php if ($b['dibagikan']) : ?>
-                            <i class="bi bi-people-fill text-success position-absolute top-0 start-0 m-2" title="Dibagikan"></i>
+                            <button type="button" class="btn btn-link p-0 border-0 text-success position-absolute top-0 start-0 m-2 lh-1 berkas-bagi" data-kode="<?= $this->escapeHtmlAttr($b['kode']) ?>" data-nama="<?= $this->escapeHtmlAttr($b['nama']) ?>" title="Dibagikan, klik untuk mengatur" aria-label="Atur berbagi <?= $this->escapeHtmlAttr($b['nama']) ?>"><i class="bi bi-people-fill"></i></button>
 <?php endif ?>
                             <?= $menu($b) ?>
                         </div>
@@ -282,7 +282,7 @@ $buka = function (array $b): string {
                                     <td class="berkas-nama">
                                         <span class="berkas-ikon me-2"><i class="bi bi-<?= $this->escapeHtmlAttr($b['ikon']) ?>"></i></span><a <?= $buka($b) ?>><?= $this->escapeHtml($b['nama']) ?></a>
 <?php if ($b['dibagikan']) : ?>
-                                        <i class="bi bi-people-fill text-success ms-1" title="Dibagikan"></i>
+                                        <button type="button" class="btn btn-link p-0 border-0 text-success ms-1 align-baseline berkas-bagi" data-kode="<?= $this->escapeHtmlAttr($b['kode']) ?>" data-nama="<?= $this->escapeHtmlAttr($b['nama']) ?>" title="Dibagikan, klik untuk mengatur" aria-label="Atur berbagi <?= $this->escapeHtmlAttr($b['nama']) ?>"><i class="bi bi-people-fill"></i></button>
 <?php endif ?>
 <?php if (! $b['milikSaya']) : ?>
                                         <span class="badge text-bg-light border ms-1"><?= $b['hak'] === 'tulis' ? 'boleh menulis' : 'hanya baca' ?></span>
