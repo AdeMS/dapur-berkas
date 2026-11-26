@@ -77,7 +77,14 @@ beraksen. Tanpa keduanya modul tetap berjalan.
 
 ## Pengaturan
 
-Tulis di `config/autoload/berkas.local.php` (tidak bisa diubah dari website):
+Tulis di `config/autoload/berkas.local.php` (tidak bisa diubah dari website). Contoh lengkap dengan penjelasan ada di
+`config/berkas.local.php.dist`:
+
+```bash
+cp vendor/adems/dapur-berkas/config/berkas.local.php.dist config/autoload/berkas.local.php
+```
+
+Isinya:
 
 ```php
 return [
