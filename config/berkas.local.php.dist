@@ -1,0 +1,41 @@
+<?php
+
+/**
+ * Contoh pengaturan Berkas Dapur AdeMS.
+ *
+ * Salin ke folder inti Dapur (atau ke config/autoload website tertentu):
+ *
+ *     cp vendor/adems/dapur-berkas/config/berkas.local.php.dist config/autoload/berkas.local.php
+ *
+ * File *.local.php diabaikan Git. Semua kunci boleh dihapus: tanpa file ini modul memakai nilai bawaan.
+ * Sesudah mengubah file ini, hapus cache konfigurasi: composer clear-config-cache
+ */
+
+declare(strict_types=1);
+
+return [
+    'berkas' => [
+        // Folder berkas tiap akun (<folder>/<kode akun>/...). Harus bisa ditulis web server.
+        // Bawaan: <inti>/data/berkas
+        // 'folder' => '/path/ke/data/berkas',
+
+        // Kuota bawaan tiap user dalam MB (0 = tanpa batas). Kuota khusus: vendor/bin/dapur-berkas kuota
+        // 'kuota_mb' => 1024,
+
+        // Berapa hari berkas di tempat sampah sebelum dihapus permanen.
+        // 'sampah_hari' => 30,
+
+        // Ukuran paling besar satu berkas dalam MB (unggahan dikirim bertahap per 1 MB).
+        // 'unggah_maks_mb' => 2048,
+
+        // Lokasi tambahan (alias): berkas milik satu akun disimpan di folder lain di server.
+        // - kunci (mis. 'foto') = nama alias: huruf kecil, angka, tanda minus, maks 30 karakter;
+        //   'saya', 'bagi', 'sampah', 'cari' tidak boleh dipakai;
+        // - 'path'    = folder di server, harus bisa ditulis web server, sebaiknya kosong saat mulai dipakai;
+        // - 'pemilik' = email akun pemilik (hanya akun ini yang melihat lokasi ini di penjelajah);
+        // - 'judul'   = nama yang tampil di penjelajah (opsional).
+        // 'lokasi' => [
+        //     'foto' => ['path' => '/path/ke/foto', 'pemilik' => 'nama@contoh.com', 'judul' => 'Foto'],
+        // ],
+    ],
+];
