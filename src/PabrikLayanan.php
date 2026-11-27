@@ -64,6 +64,17 @@ final class PabrikLayanan
             $c->get(PengaturanUser::class)->zonaWaktu,
             $pintu->lingkup,
             $template,
+            static function (int $userId) use ($c): array {
+                $profil = $c->get(DaftarUser::class)->profil();
+                $kode   = [];
+                foreach ($profil->semuaFoto() as $f) {
+                    if ($f['user_id'] === $userId) {
+                        $kode[] = $f['kode'];
+                    }
+                }
+
+                return $kode;
+            },
         );
     }
 
