@@ -13,7 +13,10 @@ awan sederhana.
 - **Penjelajah berkas** dengan tampilan daftar atau ikon, pratinjau gambar/video/audio/PDF, unggah file atau satu
   folder sekaligus (tarik-lepas), dan **pencarian** nama berkas.
 
-Halamannya dipasang oleh [Dashboard Dapur AdeMS](https://github.com/AdeMS/dapur-dashboard) 2.9 ke atas di menu
+Foto profil akun ([adems/dapur-user](https://github.com/AdeMS/dapur-user) 2.7) juga disimpan di sini, di folder
+**Foto Profil**, lengkap dengan riwayat fotonya (lihat [Foto profil](#foto-profil)).
+
+Halamannya dipasang oleh [Dashboard Dapur AdeMS](https://github.com/AdeMS/dapur-dashboard) 2.10 ke atas di menu
 **Berkas** (`/berkas`, atau `/dashboard/berkas` di dashboard website), untuk semua user yang login.
 
 ## Konsep
@@ -123,6 +126,38 @@ vendor/bin/dapur-berkas bersihkan                    hapus permanen isi tempat s
 
 Tempat sampah juga dibersihkan sesekali secara otomatis saat penjelajah dibuka, jadi perintah `bersihkan` tidak wajib
 dijadwalkan.
+
+## Foto profil
+
+Bila modul ini terpasang, foto profil [adems/dapur-user](https://github.com/AdeMS/dapur-user) 2.7 disimpan sebagai
+berkas (kelas `FotoBerkas`, layanan `AdeMS\Dapur\User\PenyimpanFoto`):
+
+- foto **asli** disimpan apa adanya di folder sistem **Foto Profil** di Berkas Saya, dengan nama seperti
+  `Foto profil 2026-11-27 10.15.30.jpg`, dan ikut kuota;
+- folder **Foto Profil** dibuat otomatis dan tidak bisa diganti nama, dipindah, atau dibuang (isinya tetap berkas
+  biasa yang bisa dibagikan atau dibuang);
+- avatar persegi 256 piksel (WebP, tanpa EXIF) dibuat dari foto asli dan disimpan sebagai cache di
+  `data/cache/berkas/avatar/`; bila cache hilang, avatar dibuat ulang;
+- foto lama tetap di folder itu sebagai **riwayat foto**, dan bisa dipilih lagi dari tab Profil di Pengaturan &
+  Privasi.
+
+Foto asli lengkap dengan EXIF-nya hanya terlihat oleh pemiliknya (seperti berkas lain). Orang lain hanya melihat
+avatar yang sudah dibuat ulang.
+
+## Memperbarui dari 1.0
+
+Versi 1.1 butuh adems/dapur-user 2.7 dan [Dashboard Dapur AdeMS](https://github.com/AdeMS/dapur-dashboard) 2.10
+(alamat foto berkode baru). Sesudah `composer update`, jalankan sekali:
+
+```bash
+php dapur pasang
+```
+
+Langkah `1.1-foto-profil` memindah foto profil lama dari `data/upload/avatar` ke folder **Foto Profil** masing-masing
+akun (sebagai `Foto profil lama.webp`, tanpa memeriksa kuota), lalu mengganti kode foto di akun dan profil website.
+Foto lama hanya tersedia dalam versi 256 piksel, karena foto aslinya memang tidak pernah disimpan. File lama tidak
+dihapus otomatis; sesudah pasang selesai, folder `data/upload/avatar` boleh dihapus. Sebelum pasang, foto lama tetap
+tampil seperti biasa.
 
 ## Memakai di modul lain
 
