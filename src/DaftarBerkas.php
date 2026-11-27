@@ -81,6 +81,18 @@ final class DaftarBerkas
         return $this->berkas($this->baris($sql, $indukId === null ? [$pemilikId, $lokasi] : [$pemilikId, $lokasi, $indukId]));
     }
 
+    /** Folder sistem milik akun di akar lokasi (mis. 'foto_profil'), tanpa yang dibuang. */
+    public function sistem(int $pemilikId, string $lokasi, string $sistem): ?Berkas
+    {
+        $b = $this->baris(
+            'SELECT * FROM ' . $this->q($this->t->berkas)
+            . ' WHERE pemilik_id = ? AND lokasi = ? AND sistem = ? AND induk_id IS NULL AND dihapus_pada IS NULL ORDER BY id',
+            [$pemilikId, $lokasi, $sistem],
+        );
+
+        return $b === [] ? null : Berkas::dariBaris($b[0]);
+    }
+
     /** @return list<Berkas> anak langsung (termasuk yang dibuang) */
     public function anak(int $id): array
     {
