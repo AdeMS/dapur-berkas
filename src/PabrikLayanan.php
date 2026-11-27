@@ -10,6 +10,8 @@ use AdeMS\Dapur\Berkas\Handler\JelajahHandler;
 use AdeMS\Dapur\Berkas\Handler\PublikHandler;
 use AdeMS\Dapur\Database\PabrikPemasang;
 use AdeMS\Dapur\User\DaftarUser;
+use AdeMS\Dapur\User\FotoUser;
+use AdeMS\Dapur\User\PenyimpanFoto;
 use AdeMS\Dapur\User\Konteks;
 use AdeMS\Dapur\User\PenyajiDasar;
 use AdeMS\Dapur\User\PenyajiHalaman;
@@ -37,6 +39,17 @@ final class PabrikLayanan
             KelolaBerkas::class => self::kelola($c),
             Gambar::class       => new Gambar($c->get(Pengaturan::class)->folderCache),
             self::UNGGAHAN      => new Unggahan($c->get(Pengaturan::class)->folderSementara, $c->get(Pengaturan::class)->unggahMaks),
+            PenyimpanFoto::class => new FotoBerkas(
+                $c->get(KelolaBerkas::class),
+                $c->get(Pengaturan::class)->folderCache . '/avatar',
+                $c->get(FotoUser::class),
+                $c->get(PengaturanUser::class)->zonaWaktu,
+            ),
+            BerkasSkema::class => new BerkasSkema(static function () use ($c): ?string {
+                $foto = $c->get(PenyimpanFoto::class);
+
+                return $foto instanceof FotoBerkas ? $foto->pindahkanFotoLama($c->get(DaftarUser::class)->profil()) : null;
+            }),
             default             => throw new RuntimeException("Layanan berkas tidak dikenal: {$nama}"),
         };
     }
