@@ -43,6 +43,9 @@ final class JelajahHandler implements RequestHandlerInterface
     public const SESI_PESAN = 'berkas.pesan';
     public const SESI_GALAT = 'berkas.galat';
 
+    /** Kode berkas yang baru dibuang, untuk tombol Batalkan pada pesan berikutnya. */
+    public const SESI_URUNG = 'berkas.urung';
+
     public const LIHAT_BAGI   = 'bagi';
     public const LIHAT_SAMPAH = 'sampah';
 
@@ -112,12 +115,15 @@ final class JelajahHandler implements RequestHandlerInterface
 
         $pesan = $sesi->ambil(self::SESI_PESAN);
         $galat = $sesi->ambil(self::SESI_GALAT);
+        $urung = $sesi->ambil(self::SESI_URUNG);
         $sesi->hapus(self::SESI_PESAN);
         $sesi->hapus(self::SESI_GALAT);
+        $sesi->hapus(self::SESI_URUNG);
 
         return $this->penyaji->halaman($this->template, $request, $this->data($user, $q) + [
             'pesan' => is_string($pesan) ? $pesan : null,
             'galat' => is_string($galat) ? $galat : null,
+            'urung' => is_string($pesan) && is_string($urung) ? $urung : null,
         ] + $this->kosong());
     }
 
@@ -376,6 +382,7 @@ final class JelajahHandler implements RequestHandlerInterface
         $berkas  = $this->kelola->daftar->kode($teks('kode'));
         $kembali = is_string($isi['kembali'] ?? null) && str_starts_with($isi['kembali'], '?') ? $isi['kembali'] : '';
         $hasil   = [];
+        $urung   = null;
 
         try {
             $pesan = match ($aksi) {
@@ -395,9 +402,10 @@ final class JelajahHandler implements RequestHandlerInterface
 
                     return "\"{$b->nama}\" dipindah ke " . ($tujuan?->nama ?? $this->kelola->judulLokasi($b->lokasi)) . '.';
                 })(),
-                'buang' => (function () use ($user, $berkas): string {
+                'buang' => (function () use ($user, $berkas, &$urung): string {
                     $b = $this->ada($berkas);
                     $this->kelola->buang($user->id, $b);
+                    $urung = $b->kode;
 
                     return "\"{$b->nama}\" dipindah ke tempat sampah.";
                 })(),
@@ -450,6 +458,13 @@ final class JelajahHandler implements RequestHandlerInterface
             $sesi->simpan(self::SESI_GALAT, $e->getMessage());
 
             return new RedirectResponse($this->pintu->rute('/berkas') . $kembali);
+        }
+
+        // Sesudah membuang, pesan di halaman berikutnya membawa tombol Batalkan (juga bila dibuang dari jendela
+        // pratinjau lewat JSON, karena halaman dimuat ulang saat jendela itu ditutup).
+        if ($urung !== null) {
+            $sesi->simpan(self::SESI_PESAN, $pesan);
+            $sesi->simpan(self::SESI_URUNG, $urung);
         }
 
         if ($json) {
@@ -574,6 +589,7 @@ final class JelajahHandler implements RequestHandlerInterface
             'lokasiAktif' => '',
             'pesan'       => null,
             'galat'       => null,
+            'urung'       => null,
             'lingkup'     => $this->lingkup,
             'alamatDasar' => $this->pintu->rute('/berkas'),
             'jenisBerkas' => JenisBerkas::teks(),
