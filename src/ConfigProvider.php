@@ -25,6 +25,9 @@ final class ConfigProvider
                     KelolaBerkas::class,
                     Gambar::class,
                     PabrikLayanan::UNGGAHAN,
+                    // Foto profil adems/dapur-user disimpan sebagai berkas (folder Foto Profil, dengan riwayat).
+                    \AdeMS\Dapur\User\PenyimpanFoto::class,
+                    BerkasSkema::class,
                 ], PabrikLayanan::class),
             ],
         ];
