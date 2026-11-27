@@ -266,6 +266,37 @@ final class KelolaBerkas
     }
 
     /**
+     * Folder sistem di akar Berkas Saya milik akun (dibuat bila belum ada), mis. "Foto Profil". Folder sistem tidak bisa
+     * diganti nama, dipindah, atau dibuang; isinya tetap berkas biasa. Bila nama itu sudah dipakai folder biasa, folder
+     * sistem diberi nama "Foto Profil (2)".
+     */
+    public function folderSistem(int $userId, string $sistem, string $nama): Berkas
+    {
+        $ada = $this->daftar->sistem($userId, '', $sistem);
+        if ($ada !== null) {
+            return $ada;
+        }
+
+        $this->akarFisik($userId, '');
+        $nama = NamaBerkas::bersihkan($nama);
+        for ($n = 2, $calon = $nama; $this->daftar->namaDipakai($userId, '', null, $calon); $n++) {
+            $calon = NamaBerkas::berikutnya($nama, $n, true);
+        }
+
+        $berkas = $this->daftar->tambah($userId, '', null, true, $calon, 0, null, $sistem);
+        try {
+            self::buatFolderFisik($this->jalurFisik($berkas));
+        } catch (GagalBerkas $e) {
+            $this->daftar->hapus([$berkas->id]);
+            throw $e;
+        }
+
+        $this->daftar->catat($berkas->id, $userId, $userId, 'buat_folder', $this->jalurTampil($berkas));
+
+        return $berkas;
+    }
+
+    /**
      * Folder di dalam folder (dibuat bila belum ada), untuk unggah folder: "Liburan/Pantai" -> folder Pantai.
      */
     public function folderBertingkat(int $userId, string $lokasi, ?Berkas $induk, string $jalur): ?Berkas
@@ -288,8 +319,10 @@ final class KelolaBerkas
 
     /**
      * Menyimpan file unggahan. Bila nama sudah ada, berkas baru diberi nama "nama (2).ext" (berkas lama tidak ditimpa).
+     *
+     * @param bool $periksaKuota false hanya untuk pemindahan data lama (mis. foto profil lama ke folder Foto Profil)
      */
-    public function simpanFile(int $userId, string $lokasi, ?Berkas $induk, string $namaFile, string $fileSementara): Berkas
+    public function simpanFile(int $userId, string $lokasi, ?Berkas $induk, string $namaFile, string $fileSementara, bool $periksaKuota = true): Berkas
     {
         [$pemilik, $lokasi, $induk] = $this->tujuanTulis($userId, $lokasi, $induk);
         $nama = NamaBerkas::bersihkan($namaFile);
@@ -302,7 +335,9 @@ final class KelolaBerkas
         }
 
         $ukuran = (int) filesize($fileSementara);
-        $this->periksaKuota($pemilik, $lokasi, $ukuran);
+        if ($periksaKuota) {
+            $this->periksaKuota($pemilik, $lokasi, $ukuran);
+        }
 
         for ($n = 2, $calon = $nama; $this->daftar->namaDipakai($pemilik, $lokasi, $induk?->id, $calon); $n++) {
             $calon = NamaBerkas::berikutnya($nama, $n, false);
