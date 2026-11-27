@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace AdeMS\Dapur\Berkas;
 
 use AdeMS\Dapur\Database\KonteksSkema;
+use Closure;
 use AdeMS\Dapur\Database\SkemaModul;
 
 /**
@@ -18,6 +19,14 @@ use AdeMS\Dapur\Database\SkemaModul;
 final class BerkasSkema implements SkemaModul
 {
     public const NAMA = 'berkas';
+
+    /**
+     * @param Closure(): ?string|null $pindahFoto memindah foto profil lama ke folder Foto Profil (dari container, lihat
+     *        PabrikLayanan); tanpa itu langkah '1.1-foto-profil' belum dijalankan dan menunggu pasang berikutnya
+     */
+    public function __construct(private readonly ?Closure $pindahFoto = null)
+    {
+    }
 
     public function nama(): string
     {
@@ -117,6 +126,15 @@ final class BerkasSkema implements SkemaModul
 
     public function langkah(KonteksSkema $k): array
     {
-        return [];
+        if ($this->pindahFoto === null) {
+            return [];
+        }
+
+        $pindah = $this->pindahFoto;
+
+        return [
+            // 1.1: foto profil lama (adems/dapur-user, data/upload/avatar) menjadi berkas di folder Foto Profil akun.
+            '1.1-foto-profil' => static fn (KonteksSkema $k): ?string => $pindah(),
+        ];
     }
 }
