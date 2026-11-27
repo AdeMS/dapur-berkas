@@ -19,6 +19,7 @@ use AdeMS\Dapur\User\Sesi;
 use AdeMS\Dapur\User\TokenCsrf;
 use AdeMS\Dapur\User\User;
 use DateTimeImmutable;
+use Closure;
 use DateTimeZone;
 use Laminas\Diactoros\Response\EmptyResponse;
 use Laminas\Diactoros\Response\JsonResponse;
@@ -53,7 +54,26 @@ final class JelajahHandler implements RequestHandlerInterface
         private readonly DateTimeZone $zonaWaktu,
         private readonly string $lingkup,
         private readonly string $template = self::TEMPLATE,
+        /**
+         * Kode foto profil yang sedang dipakai akun (foto akun dan foto per website): fn (int $userId): list<string>.
+         * Dipakai untuk memberi peringatan sebelum berkas itu dibuang atau dipindah.
+         */
+        private readonly ?Closure $fotoDipakai = null,
     ) {
+    }
+
+    /** @var array<int, array<string, true>> kode foto profil yang dipakai, per pemilik (sekali per permintaan) */
+    private array $fotoProfil = [];
+
+    private function fotoProfil(Berkas $b): bool
+    {
+        if ($b->folder || $this->fotoDipakai === null) {
+            return false;
+        }
+
+        $this->fotoProfil[$b->pemilikId] ??= array_fill_keys(($this->fotoDipakai)($b->pemilikId), true);
+
+        return isset($this->fotoProfil[$b->pemilikId][$b->kode]);
     }
 
     public function handle(ServerRequestInterface $request): ResponseInterface
@@ -244,6 +264,7 @@ final class JelajahHandler implements RequestHandlerInterface
             'hak'        => $hak,
             'milikSaya'  => $b->pemilikId === $userId,
             'dibagikan'  => $b->pemilikId === $userId && $this->kelola->daftar->bagiBerkas($b->id) !== [],
+            'fotoProfil' => $this->fotoProfil($b),
         ];
     }
 
