@@ -202,8 +202,12 @@ $judulMode = match ($this->mode) {
                     } ?></p>
 <?php else : ?>
 <?php
+// Peringatan untuk berkas yang sedang dipakai sebagai foto profil (akun atau website).
+$fotoProfilPesan = fn (string $nama): string => '<b>' . $this->escapeHtml($nama) . '</b> sedang dipakai sebagai foto profil. '
+    . 'Bila dibuang, foto profil diganti inisial sampai berkas ini dipulihkan dari tempat sampah '
+    . '(' . (int) $this->sampahHari . ' hari). Tetap buang?';
 // Menu tindakan satu berkas (⋮).
-$menu = function (array $b) use ($csrf, $balik): string {
+$menu = function (array $b) use ($csrf, $balik, $fotoProfilPesan): string {
     $e  = fn (string $s): string => $this->escapeHtmlAttr($s);
     $h  = [];
     if ($this->mode === 'sampah') {
@@ -215,7 +219,7 @@ $menu = function (array $b) use ($csrf, $balik): string {
         } else {
             if ($b['pratinjau'] !== null) {
                 $tulisLihat = in_array($b['hak'], ['pemilik', 'tulis'], true) && $b['sistem'] === null;
-                $h[] = '<li><button type="button" class="dropdown-item berkas-lihat" data-jenis="' . $e($b['pratinjau']) . '" data-alamat="' . $e($b['alamat']) . '" data-nama="' . $e($b['nama']) . '" data-kode="' . $e($b['kode']) . '" data-tulis="' . ($tulisLihat ? '1' : '') . '" data-milik="' . ($b['milikSaya'] ? '1' : '') . '"' . '><i class="bi bi-eye me-2"></i>Lihat</button></li>';
+                $h[] = '<li><button type="button" class="dropdown-item berkas-lihat" data-jenis="' . $e($b['pratinjau']) . '" data-alamat="' . $e($b['alamat']) . '" data-nama="' . $e($b['nama']) . '" data-kode="' . $e($b['kode']) . '" data-tulis="' . ($tulisLihat ? '1' : '') . '" data-milik="' . ($b['milikSaya'] ? '1' : '') . '" data-foto-profil="' . ($b['fotoProfil'] ? '1' : '') . '"><i class="bi bi-eye me-2"></i>Lihat</button></li>';
             }
             $h[] = '<li><a class="dropdown-item" href="' . $e($b['alamatUnduh']) . '"><i class="bi bi-download me-2"></i>Unduh</a></li>';
         }
@@ -227,13 +231,15 @@ $menu = function (array $b) use ($csrf, $balik): string {
             $h[] = '<li><button type="button" class="dropdown-item berkas-ganti-nama" data-kode="' . $e($b['kode']) . '" data-nama="' . $e($b['nama']) . '"><i class="bi bi-pencil me-2"></i>Ganti nama</button></li>';
         }
         if ($b['milikSaya'] && $b['sistem'] === null) {
-            $h[] = '<li><button type="button" class="dropdown-item berkas-pindah" data-kode="' . $e($b['kode']) . '" data-nama="' . $e($b['nama']) . '"><i class="bi bi-folder-symlink me-2"></i>Pindah</button></li>';
+            $h[] = '<li><button type="button" class="dropdown-item berkas-pindah" data-kode="' . $e($b['kode']) . '" data-nama="' . $e($b['nama']) . '" data-foto-profil="' . ($b['fotoProfil'] ? '1' : '') . '"><i class="bi bi-folder-symlink me-2"></i>Pindah</button></li>';
         }
         if ($b['milikSaya']) {
             $h[] = '<li><button type="button" class="dropdown-item berkas-bagi" data-kode="' . $e($b['kode']) . '" data-nama="' . $e($b['nama']) . '"><i class="bi bi-share me-2"></i>Bagikan</button></li>';
         }
         if ($tulis) {
-            $h[] = '<li><hr class="dropdown-divider"></li><li><form method="post">' . $csrf . $balik . '<input type="hidden" name="aksi" value="buang"><input type="hidden" name="kode" value="' . $e($b['kode']) . '"><button class="dropdown-item text-danger-emphasis"><i class="bi bi-trash me-2"></i>Buang ke sampah</button></form></li>';
+            $h[] = '<li><hr class="dropdown-divider"></li><li><form method="post">' . $csrf . $balik . '<input type="hidden" name="aksi" value="buang"><input type="hidden" name="kode" value="' . $e($b['kode']) . '"><button class="dropdown-item text-danger-emphasis"'
+                . ($b['fotoProfil'] ? ' data-judul="Buang Foto Profil" data-tombol="Tetap Buang" data-bahaya="1" data-konfirmasi="' . $e($fotoProfilPesan($b['nama'])) . '"' : '')
+                . '><i class="bi bi-trash me-2"></i>Buang ke sampah</button></form></li>';
         }
     }
 
@@ -366,6 +372,7 @@ $buka = function (array $b): string {
             <div class="modal-header"><h2 class="modal-title h5" id="berkasPindahJudul">Pindah</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button></div>
             <div class="modal-body">
                 <p class="mb-2 berkas-pindah-nama fw-semibold"></p>
+                <div class="alert alert-warning small py-2 berkas-pindah-foto" hidden><i class="bi bi-exclamation-triangle me-1"></i>Berkas ini sedang dipakai sebagai foto profil. Bila dipindah keluar dari folder Foto Profil, foto profil diganti inisial sampai berkas ini dikembalikan ke folder itu.</div>
                 <label class="form-label" for="berkasPindahTujuan">Ke folder</label>
                 <select class="form-select" id="berkasPindahTujuan" name="tujuan"></select>
             </div>
@@ -535,7 +542,7 @@ $buka = function (array $b): string {
         e.preventDefault();
         const { jenis, alamat, nama } = el.dataset;
         const badan = modalLihat.querySelector('.modal-body');
-        lihatAktif = { kode: el.dataset.kode, nama, tulis: el.dataset.tulis === '1' };
+        lihatAktif = { kode: el.dataset.kode, nama, tulis: el.dataset.tulis === '1', fotoProfil: el.dataset.fotoProfil === '1' };
         const judul = document.getElementById('berkasPratinjauJudul');
         judul.textContent = nama;
         judul.classList.toggle('berkas-bisa-ganti', lihatAktif.tulis);
@@ -610,7 +617,10 @@ $buka = function (array $b): string {
     isianNama.addEventListener('blur', () => simpanNama(false));
 
     document.getElementById('berkasPratinjauBuang').addEventListener('click', async () => {
-        if (!lihatAktif || !(await dialog({ judul: 'Buang ke Tempat Sampah', pesan: 'Buang <b>' + teksAman(lihatAktif.nama) + '</b> ke tempat sampah? Berkas masih bisa dipulihkan selama ' + <?= (int) $this->sampahHari ?> + ' hari.', tombol: 'Buang', bahaya: true }))) {
+        const pesanBuang = lihatAktif?.fotoProfil
+            ? '<b>' + teksAman(lihatAktif.nama) + '</b> sedang dipakai sebagai foto profil. Bila dibuang, foto profil diganti inisial sampai berkas ini dipulihkan dari tempat sampah (' + <?= (int) $this->sampahHari ?> + ' hari). Tetap buang?'
+            : 'Buang <b>' + teksAman(lihatAktif?.nama ?? '') + '</b> ke tempat sampah? Berkas masih bisa dipulihkan selama ' + <?= (int) $this->sampahHari ?> + ' hari.';
+        if (!lihatAktif || !(await dialog({ judul: lihatAktif.fotoProfil ? 'Buang Foto Profil' : 'Buang ke Tempat Sampah', pesan: pesanBuang, tombol: lihatAktif.fotoProfil ? 'Tetap Buang' : 'Buang', bahaya: true }))) {
             return;
         }
         try {
@@ -646,6 +656,7 @@ $buka = function (array $b): string {
     delegasi('.berkas-pindah', async (el) => {
         modalPindah.querySelector('[name=kode]').value = el.dataset.kode;
         modalPindah.querySelector('.berkas-pindah-nama').textContent = el.dataset.nama;
+        modalPindah.querySelector('.berkas-pindah-foto').hidden = el.dataset.fotoProfil !== '1';
         const pilih = modalPindah.querySelector('select');
         pilih.innerHTML = '<option>Memuat…</option>';
         bootstrap.Modal.getOrCreateInstance(modalPindah).show();
