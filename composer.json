@@ -24,12 +24,15 @@
         "composer-runtime-api": "^2.0",
         "adems/dapur-asset": "^1.0",
         "adems/dapur-database": "^1.0",
-        "adems/dapur-user": "^2.6",
+        "adems/dapur-user": "^2.7",
         "laminas/laminas-db": "^2.22",
         "laminas/laminas-diactoros": "^3.0",
         "mezzio/mezzio-template": "^2.0 || ^3.0",
         "psr/container": "^1.1 || ^2.0",
         "psr/http-server-handler": "^1.0"
+    },
+    "conflict": {
+        "adems/dapur-dashboard": "<2.10"
     },
     "suggest": {
         "ext-gd": "Untuk gambar kecil (thumbnail) dan salinan foto tanpa data lokasi (EXIF) pada tautan publik",
