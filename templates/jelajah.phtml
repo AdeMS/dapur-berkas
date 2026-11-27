@@ -102,7 +102,13 @@ $judulMode = match ($this->mode) {
 </div>
 <?php return; endif ?>
 <?php if ($this->pesan) : ?>
-    <div class="alert alert-success alert-dismissible fade show" role="status"><?= $this->escapeHtml($this->pesan) ?><button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button></div>
+    <div class="alert alert-success alert-dismissible fade show d-flex flex-wrap align-items-center gap-2" role="status">
+        <span><?= $this->escapeHtml($this->pesan) ?></span>
+<?php if ($this->urung) : ?>
+        <form method="post" class="d-inline"><?= $csrf ?><?= $balik ?><input type="hidden" name="aksi" value="pulihkan"><input type="hidden" name="kode" value="<?= $this->escapeHtmlAttr($this->urung) ?>"><button class="btn btn-sm btn-outline-success"><i class="bi bi-arrow-counterclockwise me-1"></i>Batalkan</button></form>
+<?php endif ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>
+    </div>
 <?php endif ?>
 <?php if ($this->galat) : ?>
     <div class="alert alert-danger alert-dismissible fade show" role="alert"><?= $this->escapeHtml($this->galat) ?><button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button></div>
@@ -204,8 +210,8 @@ $judulMode = match ($this->mode) {
 <?php
 // Peringatan untuk berkas yang sedang dipakai sebagai foto profil (akun atau website).
 $fotoProfilPesan = fn (string $nama): string => '<b>' . $this->escapeHtml($nama) . '</b> sedang dipakai sebagai foto profil. '
-    . 'Bila dibuang, foto profil diganti inisial sampai berkas ini dipulihkan dari tempat sampah '
-    . '(' . (int) $this->sampahHari . ' hari). Tetap buang?';
+    . 'Bila dibuang, foto profil diganti inisial. Berkas ini masih bisa dipulihkan dari tempat sampah selama '
+    . (int) $this->sampahHari . ' hari, dan foto profil akan tampil lagi. Tetap buang?';
 // Menu tindakan satu berkas (⋮).
 $menu = function (array $b) use ($csrf, $balik, $fotoProfilPesan): string {
     $e  = fn (string $s): string => $this->escapeHtmlAttr($s);
@@ -618,7 +624,7 @@ $buka = function (array $b): string {
 
     document.getElementById('berkasPratinjauBuang').addEventListener('click', async () => {
         const pesanBuang = lihatAktif?.fotoProfil
-            ? '<b>' + teksAman(lihatAktif.nama) + '</b> sedang dipakai sebagai foto profil. Bila dibuang, foto profil diganti inisial sampai berkas ini dipulihkan dari tempat sampah (' + <?= (int) $this->sampahHari ?> + ' hari). Tetap buang?'
+            ? '<b>' + teksAman(lihatAktif.nama) + '</b> sedang dipakai sebagai foto profil. Bila dibuang, foto profil diganti inisial. Berkas ini masih bisa dipulihkan dari tempat sampah selama ' + <?= (int) $this->sampahHari ?> + ' hari, dan foto profil akan tampil lagi. Tetap buang?'
             : 'Buang <b>' + teksAman(lihatAktif?.nama ?? '') + '</b> ke tempat sampah? Berkas masih bisa dipulihkan selama ' + <?= (int) $this->sampahHari ?> + ' hari.';
         if (!lihatAktif || !(await dialog({ judul: lihatAktif.fotoProfil ? 'Buang Foto Profil' : 'Buang ke Tempat Sampah', pesan: pesanBuang, tombol: lihatAktif.fotoProfil ? 'Tetap Buang' : 'Buang', bahaya: true }))) {
             return;
